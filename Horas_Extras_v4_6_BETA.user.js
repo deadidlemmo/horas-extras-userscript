@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Horas Extras - Lançamento e Consulta
 // @namespace    https://servicosead.praiagrande.sp.gov.br/
-// @version      4.6.0-beta.18
-// @description  HE variável até 4h, consulta preventiva de datas e relatório exportável — beta para testes
+// @version      4.6.0-beta.19
+// @description  HE variável conforme horários, consulta preventiva de datas e relatório exportável — beta para testes
 // @match        https://servicosead.praiagrande.sp.gov.br/folha/CadastroHoras.aspx*
 // @match        https://servicosead.praiagrande.sp.gov.br/folha/ConsultaRegistro.aspx*
 // @grant        GM_xmlhttpRequest
@@ -36,7 +36,7 @@
     function operacaoInclusaoValidaHE(op){
         if(!op||typeof op.id!=='string'||!op.id||!/^\d{1,6}$/.test(String(op.rf))||typeof op.nome!=='string'||!op.nome.trim()||!op.periodo||typeof op.periodo.nome!=='string'||!op.periodo.nome.trim()||!/^\d{4}$/.test(String(op.periodo.ano)))return false;
         const a=typeof op.data==='string'&&op.data.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);if(!a)return false;const dt=new Date(Number(a[3]),Number(a[2])-1,Number(a[1]),12);if(dt.getFullYear()!==Number(a[3])||dt.getMonth()!==Number(a[2])-1||dt.getDate()!==Number(a[1]))return false;
-        return op.linha?.data===op.data&&['entrada','saidaAl','retorno','saida'].every(k=>typeof op.linha[k]==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(op.linha[k]))&&[op.seg50,op.seg100].every(v=>Number.isFinite(v)&&v>=0)&&op.seg50+op.seg100>0&&op.seg50+op.seg100<=14400;
+        return op.linha?.data===op.data&&['entrada','saidaAl','retorno','saida'].every(k=>typeof op.linha[k]==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(op.linha[k]))&&[op.seg50,op.seg100].every(v=>Number.isFinite(v)&&v>=0)&&op.seg50+op.seg100>0&&op.seg50+op.seg100<24*60*60;
     }
     function lerOperacaoHE(rf,data){
         const raw=localStorage.getItem(chaveOperacaoHE(rf,data));if(!raw)return null;
@@ -234,7 +234,6 @@
     ];
 
     const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-    const HE_LIMITE_SEGUNDOS = 4 * 60 * 60;
     const JORNADA_NORMAL_MINUTOS = 240;
     const CARGA_SISTEMA = '04:00';
     const MODO_SIMULACAO = window.__HEL_SIMULACAO__ === true;
@@ -1161,13 +1160,13 @@
                         </div>
                     </div>
                     <div class="hel-field">
-                        <label>HE permitida</label>
-                        <div class="hel-carga" title="Carga normal: 04:00. HE calculada pelos horários, limitada a 04:00 por dia.">Até 04:00 / dia</div>
+                        <label>Jornada normal</label>
+                        <div class="hel-carga" title="A HE é calculada pelos horários informados e conferida com o sistema.">04:00</div>
                     </div>
                 </div>
 
                 <div id="helServidorSelecionado" class="hel-server-selected"></div>
-                <div class="hel-note"><details id="helRegraCalculo"><summary>Como é calculado</summary><div class="hel-calculo-info"><p>Somamos o tempo trabalhado antes e depois do almoço, sem contar o intervalo. Descontamos as <strong>4 horas da jornada normal</strong>; o restante são horas extras.</p><div class="hel-calculo-exemplo"><span>Exemplo:</span><span><b>6h</b> trabalhadas</span><span aria-hidden="true">−</span><span><b>4h</b> de jornada normal</span><span aria-hidden="true">=</span><strong>2h extras</strong></div><p>Você pode cadastrar menos de 4 horas extras. O limite é <strong>4 horas extras por dia</strong>.</p><p class="hel-calculo-ajuste">Se for necessário adaptar os horários para o sistema calcular corretamente, a alteração será mostrada antes de você confirmar.</p></div></details></div>
+                <div class="hel-note"><details id="helRegraCalculo"><summary>Como é calculado</summary><div class="hel-calculo-info"><p>Somamos o tempo trabalhado antes e depois do almoço, sem contar o intervalo. Descontamos as <strong>4 horas da jornada normal</strong>; o restante são horas extras.</p><div class="hel-calculo-exemplo"><span>Exemplo:</span><span><b>6h</b> trabalhadas</span><span aria-hidden="true">−</span><span><b>4h</b> de jornada normal</span><span aria-hidden="true">=</span><strong>2h extras</strong></div><p>A HE pode ser menor ou maior que 4 horas. O valor precisa coincidir com o cálculo devolvido pelo sistema.</p><p class="hel-calculo-ajuste">Se for necessário adaptar os horários para o sistema calcular corretamente, a alteração será mostrada antes de você confirmar.</p></div></details></div>
                 <div id="helConsultaCompacta" style="margin-top:8px">
                     <button type="button" class="hel-btn" id="helConsultarExistentes">Atualizar</button>
                     <a class="hel-btn" href="ConsultaRegistro.aspx" target="_blank" rel="noopener">Abrir consulta</a>
@@ -1790,15 +1789,15 @@
         /*
          * Regra funcional:
          * - o horário informado pelo usuário é o horário real;
-         * - a soma real dos blocos menos 4h define a HE (maior que zero e até 4h);
+         * - a soma real dos blocos menos 4h define a HE (maior que zero);
          * - a carga enviada ao sistema permanece SEMPRE 04:00;
          * - quando existe intervalo entre Saída/Almoço e Retorno/Almoço,
-         *   o sistema histórico não reconhece corretamente as 4h extras.
+         *   o sistema histórico pode não reconhecer corretamente a HE.
          *
          * Compatibilidade aplicada:
-         * preserva integralmente o período de HE (Retorno -> Saída) e cria,
+         * preserva integralmente o segundo bloco (Retorno -> Saída) e cria,
          * somente para o POST ao sistema, o primeiro bloco com sua duração real
-         * imediatamente anterior ao início da HE.
+         * imediatamente anterior ao retorno.
          *
          * Ex. real 07–11 / 13–17 -> sistema 09–13 / 13–17.
          */
@@ -2306,7 +2305,6 @@
         if (saida <= retorno) return 'Saída deve ser posterior ao retorno';
         const he = heEsperadaSegundos(linha);
         if (he <= 0) return 'A jornada não gera HE: o trabalho efetivo precisa superar a carga normal de 4h';
-        if (he > HE_LIMITE_SEGUNDOS) return 'HE prevista de ' + formatarSegundos(he) + ' excede o limite diário de 04:00';
         return '';
     }
 
@@ -2438,7 +2436,7 @@
     // - a carga horária enviada permanece sempre 04:00;
     // - o horário real informado pelo usuário nunca é alterado na interface;
     // - quando necessário, somente o POST usa um primeiro bloco técnico
-    //   contínuo de 4h antes das 4h extras;
+    //   contínuo antes do período final de trabalho;
     // - a inclusão parte EXATAMENTE do HTML/VIEWSTATE devolvido pelo cálculo.
 
     function limparBotoesDePost(params) {
@@ -3862,7 +3860,7 @@
                 heRetornada: tr.dataset.preview === '1' ? formatarSegundos(Number(tr.dataset.total || 0)) : null,
                 registroExistente: cadastrado || null, conferenciaConsulta: tr.dataset.conferenciaConsulta || '', registroVerificado: tr.dataset.registroVerificado ? JSON.parse(tr.dataset.registroVerificado) : null, status: tr.querySelector('.hel-status').textContent };
         });
-        const dados = { versao: '4.6.0-beta.18', simulacao: MODO_SIMULACAO, exportadoEm: new Date().toISOString(),
+        const dados = { versao: '4.6.0-beta.19', simulacao: MODO_SIMULACAO, exportadoEm: new Date().toISOString(),
             contextoAtual: metaAuditoriaAtual(), contextoAuditoria: auditoriaMeta, consultaConfirmada,
             contextoConsulta: consultaContexto, recuperacoesRascunhos: listarRecuperacoesHE(infoServidor()?.rf??null), exclusoesPendentes: infoServidor()?listarExclusoesPendentesHE(infoServidor().rf):[], exclusoesPainel: [...lerHistoricoExclusoes(),...exclusoesPainel], inclusoesPendentes: infoServidor()?listarOperacoesHE(infoServidor().rf):[], calendario: { ano: mesAnoHoras().ano, resumo: resumoConsultaCalendario(mesAnoHoras().ano), fonte: 'https://brasilapi.com.br/api/feriados/v1/' + mesAnoHoras().ano, respostaRecebidaEm: consultasCalendario.get(mesAnoHoras().ano)?.em || null, somenteAvisos: !bloquearFeriadosNacionais(), bloquearFeriadosNacionais: bloquearFeriadosNacionais(), referenciasLocaisConferidasEm: '2026-10-04', avisos: linhas.map(l => ({ data: l.data, aviso: avisoCalendario(l.data) })).filter(l => l.aviso) }, linhas, auditoria };
         dados.avisosHistorico=[...avisosHistoricoHE];if(avisosHistoricoHE.length)mensagem('warning','Relatório exportado com os dados válidos. '+avisosHistoricoHE.length+' registro(s) do histórico não puderam ser lidos e foram preservados.');
@@ -4954,7 +4952,7 @@
     renderAuditoria();
     atualizarAvisoRascunho();
 
-    console.log('[HE Lote] Versão 4.6 beta 18 carregada.' + (MODO_SIMULACAO ? ' MODO SIMULAÇÃO.' : ''));
+    console.log('[HE Lote] Versão 4.6 beta 19 carregada.' + (MODO_SIMULACAO ? ' MODO SIMULAÇÃO.' : ''));
     }
 
     // ---------------------------------------------------------------------
@@ -5561,7 +5559,7 @@
             <div class="helq-header">
                 <div>
                     <h1>Consulta de Horas Extras</h1>
-                    <div class="helq-subtitle">Consulta, conferência e exclusão por lançamento · <strong>v4.6 beta 18</strong></div>
+                    <div class="helq-subtitle">Consulta, conferência e exclusão por lançamento · <strong>v4.6 beta 19</strong></div>
                 </div>
                 <a class="helq-back" href="${voltarHref}">← Voltar</a>
             </div>
@@ -6079,7 +6077,7 @@
         iniciarMelhoriasConsulta();
         conferirExclusaoAnterior();
 
-        console.log(`[HE Consulta] Versão 4.6 beta 18 carregada. ${registros.length} lançamento(s) renderizado(s).`);
+        console.log(`[HE Consulta] Versão 4.6 beta 19 carregada. ${registros.length} lançamento(s) renderizado(s).`);
     }
 
 })();
