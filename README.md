@@ -1,12 +1,13 @@
 # Horas Extras — lançamento e consulta
 
-![Tampermonkey](https://img.shields.io/badge/Userscript-Tampermonkey-161b22?style=for-the-badge&logo=tampermonkey&logoColor=9cdd64) ![Versão](https://img.shields.io/badge/versão-4.6.0--beta.19-6e9f43?style=for-the-badge)
+![Tampermonkey](https://img.shields.io/badge/Userscript-Tampermonkey-161b22?style=for-the-badge&logo=tampermonkey&logoColor=9cdd64) ![Versão](https://img.shields.io/badge/versão-4.6.0--beta.20-6e9f43?style=for-the-badge)
 
 Userscript criado por **Nilson Cruz** para tornar mais simples o cadastro e a conferência de horas extras no navegador. É um complemento independente: os registros oficiais continuam no sistema original.
 
 ## O que faz
 
 - Prepara vários dias de horas extras em um único lote e mostra o cálculo antes do envio.
+- Organiza a página inicial com acesso ao Cadastro, à Consulta e à alteração de senha.
 - Calcula a HE além da jornada normal de 4 horas sem impor teto de 4 horas extras; valores maiores continuam sujeitos à confirmação do sistema original.
 - Consulta dias já registrados e sinaliza possíveis duplicidades ou divergências.
 - Organiza relatórios e exclusões, com confirmação e conferência do resultado.
@@ -31,7 +32,7 @@ O código publicado omite o número funcional e o telefone pessoal presentes no 
 
 | Arquivo | Conteúdo |
 | --- | --- |
-| [`Horas_Extras_v4_6_BETA.user.js`](Horas_Extras_v4_6_BETA.user.js) | Userscript 4.6.0-beta.19 |
+| [`Horas_Extras_v4_6_BETA.user.js`](Horas_Extras_v4_6_BETA.user.js) | Userscript 4.6.0-beta.20 |
 
 ## Autoria
 

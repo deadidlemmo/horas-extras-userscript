@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Horas Extras - Lançamento e Consulta
 // @namespace    https://servicosead.praiagrande.sp.gov.br/
-// @version      4.6.0-beta.19
+// @version      4.6.0-beta.20
 // @description  HE variável conforme horários, consulta preventiva de datas e relatório exportável — beta para testes
 // @match        https://servicosead.praiagrande.sp.gov.br/folha/CadastroHoras.aspx*
 // @match        https://servicosead.praiagrande.sp.gov.br/folha/ConsultaRegistro.aspx*
+// @match        https://servicosead.praiagrande.sp.gov.br/folha/PrincipalDoUsuario.aspx*
 // @grant        GM_xmlhttpRequest
 // @connect      brasilapi.com.br
 // @run-at       document-start
@@ -217,9 +218,46 @@
         if(document.documentElement)instalar();else {const o=new MutationObserver(()=>{if(document.documentElement){o.disconnect();instalar();}});o.observe(document,{childList:true});}
         carregamentoConsulta=setTimeout(()=>document.documentElement?.classList.remove('helq-loading'),5000);
     }
-    const iniciar=()=>{try {if(consultaPagina)initConsulta();else if(paginaAtual.endsWith('/cadastrohoras.aspx'))initCadastro();}finally {clearTimeout(carregamentoConsulta);document.documentElement?.classList.remove('helq-loading');}};
+    const iniciar=()=>{try {if(consultaPagina)initConsulta();else if(paginaAtual.endsWith('/cadastrohoras.aspx'))initCadastro();else if(paginaAtual.endsWith('/principaldousuario.aspx'))initPrincipal();}finally {clearTimeout(carregamentoConsulta);document.documentElement?.classList.remove('helq-loading');}};
     if(document.readyState==='loading'&&window.__HEL_SIMULACAO__!==true)document.addEventListener('DOMContentLoaded',iniciar,{once:true});else iniciar();
     return;
+
+    function initPrincipal() {
+        if (document.getElementById('hel-home')) return;
+        const form = document.getElementById('form1');
+        const cadastro = document.getElementById('HyperLink1');
+        const consulta = document.getElementById('HyperLink3');
+        const senha = document.getElementById('HyperLink8');
+        const menuOriginal = cadastro?.closest('p');
+        if (!form || !cadastro || !consulta || !senha || !menuOriginal ||
+            !menuOriginal.contains(consulta) || !menuOriginal.contains(senha)) return;
+
+        const style = document.createElement('style');
+        style.textContent = `
+            #hel-home{max-width:980px;margin:40px auto;padding:0 20px;font:14px/1.5 Arial,Helvetica,sans-serif;color:#263747}
+            #hel-home *{box-sizing:border-box}
+            #hel-home header{border-left:5px solid #2f5d86;border-bottom:1px solid #aeb7bf;padding:10px 16px;margin-bottom:24px}
+            #hel-home h1{font-size:25px;line-height:1.25;margin:0;color:#22384c}
+            #hel-home header p{margin:6px 0 0;color:#5c6975}
+            #hel-home nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+            #hel-home .hel-home-link{display:block;padding:22px;background:#fff;border:1px solid #bdcbd7;border-top:4px solid #2f5d86;border-radius:3px;color:#244866;text-decoration:none;min-height:118px}
+            #hel-home .hel-home-link:hover,#hel-home .hel-home-link:focus-visible{border-color:#2f5d86;background:#eef4f9;outline:2px solid transparent}
+            #hel-home .hel-home-link strong{display:block;font-size:18px;margin-bottom:7px}
+            #hel-home .hel-home-link span{display:block;color:#526273}
+            #hel-home .hel-home-link.hel-home-secondary{grid-column:1/-1;min-height:0;padding:14px 22px;border-top-width:1px}
+            #hel-home .hel-home-link.hel-home-secondary strong{font-size:15px;margin:0}
+            @media(max-width:650px){#hel-home{margin:22px auto;padding:0 12px}#hel-home nav{grid-template-columns:1fr}#hel-home .hel-home-link.hel-home-secondary{grid-column:auto}}
+        `;
+        const app = document.createElement('main');
+        app.id = 'hel-home';
+        app.innerHTML = '<header><h1>Sistema de Controle de Horas Extras</h1><p>Escolha o que deseja fazer.</p></header><nav aria-label="Opções do sistema"><a class="hel-home-link" id="helHomeCadastro"><strong>Cadastrar horas extras</strong><span>Informar e conferir os dias trabalhados antes do envio.</span></a><a class="hel-home-link" id="helHomeConsulta"><strong>Consultar registros</strong><span>Ver lançamentos, detalhes e exclusões.</span></a><a class="hel-home-link hel-home-secondary" id="helHomeSenha"><strong>Alterar senha</strong></a></nav>';
+        app.querySelector('#helHomeCadastro').href = cadastro.href;
+        app.querySelector('#helHomeConsulta').href = consulta.href;
+        app.querySelector('#helHomeSenha').href = senha.href;
+        menuOriginal.before(app);
+        document.head.appendChild(style);
+        menuOriginal.style.display = 'none';
+    }
 
     function duracaoRetornadaValida(v) {
         return typeof v === 'string' && /^\d{1,3}:\d{2}(?::\d{2})?$/.test(v) && Number(v.split(':')[1]) < 60 && (v.split(':').length === 2 || Number(v.split(':')[2]) < 60);
@@ -3860,7 +3898,7 @@
                 heRetornada: tr.dataset.preview === '1' ? formatarSegundos(Number(tr.dataset.total || 0)) : null,
                 registroExistente: cadastrado || null, conferenciaConsulta: tr.dataset.conferenciaConsulta || '', registroVerificado: tr.dataset.registroVerificado ? JSON.parse(tr.dataset.registroVerificado) : null, status: tr.querySelector('.hel-status').textContent };
         });
-        const dados = { versao: '4.6.0-beta.19', simulacao: MODO_SIMULACAO, exportadoEm: new Date().toISOString(),
+        const dados = { versao: '4.6.0-beta.20', simulacao: MODO_SIMULACAO, exportadoEm: new Date().toISOString(),
             contextoAtual: metaAuditoriaAtual(), contextoAuditoria: auditoriaMeta, consultaConfirmada,
             contextoConsulta: consultaContexto, recuperacoesRascunhos: listarRecuperacoesHE(infoServidor()?.rf??null), exclusoesPendentes: infoServidor()?listarExclusoesPendentesHE(infoServidor().rf):[], exclusoesPainel: [...lerHistoricoExclusoes(),...exclusoesPainel], inclusoesPendentes: infoServidor()?listarOperacoesHE(infoServidor().rf):[], calendario: { ano: mesAnoHoras().ano, resumo: resumoConsultaCalendario(mesAnoHoras().ano), fonte: 'https://brasilapi.com.br/api/feriados/v1/' + mesAnoHoras().ano, respostaRecebidaEm: consultasCalendario.get(mesAnoHoras().ano)?.em || null, somenteAvisos: !bloquearFeriadosNacionais(), bloquearFeriadosNacionais: bloquearFeriadosNacionais(), referenciasLocaisConferidasEm: '2026-10-04', avisos: linhas.map(l => ({ data: l.data, aviso: avisoCalendario(l.data) })).filter(l => l.aviso) }, linhas, auditoria };
         dados.avisosHistorico=[...avisosHistoricoHE];if(avisosHistoricoHE.length)mensagem('warning','Relatório exportado com os dados válidos. '+avisosHistoricoHE.length+' registro(s) do histórico não puderam ser lidos e foram preservados.');
@@ -4952,7 +4990,7 @@
     renderAuditoria();
     atualizarAvisoRascunho();
 
-    console.log('[HE Lote] Versão 4.6 beta 19 carregada.' + (MODO_SIMULACAO ? ' MODO SIMULAÇÃO.' : ''));
+    console.log('[HE Lote] Versão 4.6 beta 20 carregada.' + (MODO_SIMULACAO ? ' MODO SIMULAÇÃO.' : ''));
     }
 
     // ---------------------------------------------------------------------
@@ -5559,7 +5597,7 @@
             <div class="helq-header">
                 <div>
                     <h1>Consulta de Horas Extras</h1>
-                    <div class="helq-subtitle">Consulta, conferência e exclusão por lançamento · <strong>v4.6 beta 19</strong></div>
+                    <div class="helq-subtitle">Consulta, conferência e exclusão por lançamento · <strong>v4.6 beta 20</strong></div>
                 </div>
                 <a class="helq-back" href="${voltarHref}">← Voltar</a>
             </div>
@@ -6077,7 +6115,7 @@
         iniciarMelhoriasConsulta();
         conferirExclusaoAnterior();
 
-        console.log(`[HE Consulta] Versão 4.6 beta 19 carregada. ${registros.length} lançamento(s) renderizado(s).`);
+        console.log(`[HE Consulta] Versão 4.6 beta 20 carregada. ${registros.length} lançamento(s) renderizado(s).`);
     }
 
 })();
