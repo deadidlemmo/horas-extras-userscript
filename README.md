@@ -1,6 +1,6 @@
 # Horas Extras — lançamento e consulta
 
-![Tampermonkey](https://img.shields.io/badge/Userscript-Tampermonkey-161b22?style=for-the-badge&logo=tampermonkey&logoColor=9cdd64) ![Versão](https://img.shields.io/badge/versão-4.6.0--beta.23-6e9f43?style=for-the-badge)
+![Tampermonkey](https://img.shields.io/badge/Userscript-Tampermonkey-161b22?style=for-the-badge&logo=tampermonkey&logoColor=9cdd64) ![Versão](https://img.shields.io/badge/versão-4.6.0--beta.24-6e9f43?style=for-the-badge)
 
 Userscript criado por **Nilson Cruz** para tornar mais simples o cadastro e a conferência de horas extras no navegador. É um complemento independente: os registros oficiais continuam no sistema original.
 
@@ -36,13 +36,15 @@ Os testes automatizados cobrem dias úteis, sábados, domingos e feriados com du
 
 Se aparecer “Consulta não confirmada”, o envio continua bloqueado quando houver HE ilegível, valores ausentes nas duas categorias, totais divergentes ou uma consulta incompleta. Uma coluna vazia acompanhada de HE válida na outra categoria é tratada como zero. Depois de atualizar o userscript, clique em **Atualizar** e calcule os dias antes do envio.
 
+Quando os totais da Consulta divergirem da soma das linhas, a mensagem mostra a categoria, a soma calculada e o total exibido pelo sistema. Na página Consulta, os registros originais permanecem visíveis em uma tabela de somente leitura, identificada como não confirmada. Esse diagnóstico não libera envios, exclusões ou inclusões pendentes: confira os lançamentos na Consulta oficial antes de tentar outra inclusão.
+
 O código publicado omite o número funcional e o telefone pessoal presentes no material de distribuição local. Para relatar um problema, use [GitHub Issues](https://github.com/deadidlemmo/horas-extras-userscript/issues), sem incluir dados de servidores, senhas ou capturas não anonimizadas.
 
 ## Arquivos
 
 | Arquivo | Conteúdo |
 | --- | --- |
-| [`Horas_Extras_v4_6_BETA.user.js`](Horas_Extras_v4_6_BETA.user.js) | Userscript 4.6.0-beta.23 |
+| [`Horas_Extras_v4_6_BETA.user.js`](Horas_Extras_v4_6_BETA.user.js) | Userscript 4.6.0-beta.24 |
 | [`tests/horas-extras.test.js`](tests/horas-extras.test.js) | Testes automatizados do cadastro e da consulta |
 
 ## Autoria

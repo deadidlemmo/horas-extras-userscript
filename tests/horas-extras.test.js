@@ -241,7 +241,8 @@ test('cadastro e consulta: padrões de diferentes secretarias', async t => {
         for(const cenario of [
             { nome: 'duas colunas de HE vazias', he50: '', he100: '', total50: '', total100: '' },
             { nome: 'HE com formato ilegível', he50: 'cinco horas', he100: '', total50: '05:00', total100: '' },
-            { nome: 'total divergente da tabela', he50: '05:00:00', he100: '', total50: '04:00', total100: '' }
+            { nome: 'total divergente da tabela', he50: '05:00:00', he100: '', total50: '04:00', total100: '', detalhe: 'HE 50%: linhas 05:00:00, total 04:00:00' },
+            { nome: 'total decimal divergente por segundos', he50: '05:00:00', he100: '', total50: '4,99', total100: '', detalhe: 'HE 50%: linhas 05:00:00, total 04:59:24' }
         ]) await t.test(cenario.nome + ' mantém o envio bloqueado', async () => {
             const { contexto, pagina, posts, erros } = await abrirCenario(navegador, {
                 ...cenario, data: '05/10/2026', preexistenteData: '01/10/2026', carga: '08:00',
@@ -249,8 +250,10 @@ test('cadastro e consulta: padrões de diferentes secretarias', async t => {
             });
             try {
                 await pagina.click('#helCalcular');
+                if(cenario.detalhe)await pagina.waitForFunction(() => document.querySelector('#helMensagem')?.textContent.includes('Os totais divergem da tabela'));
                 assert.equal(posts.length, 0, 'consulta ambígua não autoriza cálculo ou envio');
                 assert.notEqual(await pagina.locator('#helLinhas tr').getAttribute('data-preview'), '1');
+                if(cenario.detalhe)assert.ok((await pagina.locator('#helMensagem').textContent()).includes(cenario.detalhe), await pagina.locator('#helMensagem').textContent());
                 assert.deepEqual(erros, []);
             } finally { await contexto.close(); }
         });
@@ -270,6 +273,7 @@ test('tela de consulta distingue duas marcações válidas de registros inválid
             { nome: 'HE inteira', data: '03/10/2026', entrada: '07:00', saidaAl: '', retorno: '', saida: '19:00', he50: '12', total50: '12', valido: true },
             { nome: 'ambas HE vazias', data: '03/10/2026', entrada: '07:00', saidaAl: '', retorno: '', saida: '19:00', he50: '', he100: '', valido: false },
             { nome: 'HE ilegível', data: '03/10/2026', entrada: '07:00', saidaAl: '', retorno: '', saida: '19:00', he50: '12h', total50: '12', valido: false },
+            { nome: 'total divergente mantém registros oficiais visíveis', data: '03/10/2026', entrada: '07:00', saidaAl: '', retorno: '', saida: '19:00', he50: '12:00', total50: '11:59', valido: false, detalhe: 'HE 50%: linhas 12:00:00, total 11:59:00' },
             { nome: 'horário de almoço parcial', data: '03/10/2026', entrada: '07:00', saidaAl: '12:00', retorno: '', saida: '19:00', valido: false },
             { nome: 'linha duplicada', data: '03/10/2026', entrada: '07:00', saidaAl: '', retorno: '', saida: '19:00', valido: false, duplicado: true }
         ]) await t.test(caso.nome, async () => {
@@ -293,9 +297,19 @@ test('tela de consulta distingue duas marcações válidas de registros inválid
                     assert.equal(await pagina.locator('#helqContagem').textContent(), '1', (await pagina.locator('#helqStatus').textContent()) + ' ' + JSON.stringify(await pagina.locator('#GridView1 tr').last().locator('td').allTextContents()));
                     assert.equal(await pagina.locator('#helqTotal50').textContent(), caso.he50===''?'00:00':'12:00');
                     assert.equal(await pagina.locator('#helqCopiarResumo').isDisabled(), false);
+                    assert.equal(await pagina.locator('#helqOriginalLeitura').isVisible(), false);
                 } else {
                     assert.equal(await pagina.locator('#helqContagem').textContent(), '—');
                     assert.equal(await pagina.locator('#helqCopiarResumo').isDisabled(), true);
+                    assert.equal(await pagina.locator('#helqExcluirSelecionados').isDisabled(), true);
+                    assert.equal(await pagina.locator('#helqOriginalLeitura').isVisible(), true);
+                    assert.ok(await pagina.locator('#helqOriginalTabela tr').count() >= 2, 'tabela original preservada para leitura');
+                    assert.equal(await pagina.locator('#helqOriginalTabela a, #helqOriginalTabela button, #helqOriginalTabela input').count(), 0, 'sem ações na cópia de leitura');
+                    if(caso.detalhe){
+                        assert.ok((await pagina.locator('#helqStatus').textContent()).includes(caso.detalhe));
+                        await pagina.selectOption('#DropDownList1','Dezembro');
+                        assert.equal(await pagina.locator('#helqOriginalLeitura').isVisible(), false, 'a cópia antiga some quando o filtro muda');
+                    }
                 }
                 assert.deepEqual(erros, []);
             } finally { await contexto.close(); }

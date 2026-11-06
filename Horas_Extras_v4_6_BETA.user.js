@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Horas Extras - Lançamento e Consulta
 // @namespace    https://servicosead.praiagrande.sp.gov.br/
-// @version      4.6.0-beta.23
+// @version      4.6.0-beta.24
 // @description  HE variável conforme horários, consulta preventiva de datas e relatório exportável — beta para testes
 // @match        https://servicosead.praiagrande.sp.gov.br/folha/CadastroHoras.aspx*
 // @match        https://servicosead.praiagrande.sp.gov.br/folha/ConsultaRegistro.aspx*
@@ -281,6 +281,14 @@
         if(!duracaoRetornadaValida(texto))throw Error('Formato de '+rotulo+' inesperado na consulta: '+texto.slice(0,40));
         const [horas,minutos,segundos=0]=texto.split(':').map(Number);
         return horas*3600+minutos*60+segundos;
+    }
+    function erroTotaisConsultaHE(quantidade,soma50,total50,valor50,soma100,total100,valor100){
+        const hms=segundos=>[Math.floor(segundos/3600),Math.floor(segundos%3600/60),segundos%60]
+            .map(n=>String(n).padStart(2,'0')).join(':');
+        const diferencas=[];
+        if(total50!==soma50)diferencas.push('HE 50%: linhas '+hms(soma50)+', total '+hms(total50)+' (exibido: '+String(valor50).trim().slice(0,32)+')');
+        if(total100!==soma100)diferencas.push('HE 100%: linhas '+hms(soma100)+', total '+hms(total100)+' (exibido: '+String(valor100).trim().slice(0,32)+')');
+        return new Error('Os totais divergem da tabela ('+quantidade+' linha(s)): '+diferencas.join('; ')+'. A consulta pode estar incompleta.');
     }
     function registroComHEConsultaHE(c){
         return !duracaoVaziaConsultaHE(c[8])||!duracaoVaziaConsultaHE(c[9]);
@@ -3836,9 +3844,11 @@
         const l50 = doc.querySelector('#L50'), l100 = doc.querySelector('#L100');
         if (!l50 || !l100) throw new Error('A consulta não trouxe os totais; não é possível confirmar que está completa.');
         const a = [...mapa.values()];
-        if (total(l50.textContent) !== a.reduce((sum,r) => sum + parseHora(r.he50),0) ||
-            total(l100.textContent) !== a.reduce((sum,r) => sum + parseHora(r.he100),0)) {
-            throw new Error('Os totais divergem da tabela. A consulta pode estar incompleta.');
+        const soma50 = a.reduce((sum,r) => sum + parseHora(r.he50),0);
+        const soma100 = a.reduce((sum,r) => sum + parseHora(r.he100),0);
+        const total50 = total(l50.textContent), total100 = total(l100.textContent);
+        if (total50 !== soma50 || total100 !== soma100) {
+            throw erroTotaisConsultaHE(a.length,soma50,total50,l50.textContent,soma100,total100,l100.textContent);
         }
         return mapa;
     }
@@ -3948,7 +3958,7 @@
                 heRetornada: tr.dataset.preview === '1' ? formatarSegundos(Number(tr.dataset.total || 0)) : null,
                 registroExistente: cadastrado || null, conferenciaConsulta: tr.dataset.conferenciaConsulta || '', registroVerificado: tr.dataset.registroVerificado ? JSON.parse(tr.dataset.registroVerificado) : null, status: tr.querySelector('.hel-status').textContent };
         });
-        const dados = { versao: '4.6.0-beta.23', simulacao: MODO_SIMULACAO, exportadoEm: new Date().toISOString(),
+        const dados = { versao: '4.6.0-beta.24', simulacao: MODO_SIMULACAO, exportadoEm: new Date().toISOString(),
             contextoAtual: metaAuditoriaAtual(), contextoAuditoria: auditoriaMeta, consultaConfirmada,
             contextoConsulta: consultaContexto, recuperacoesRascunhos: listarRecuperacoesHE(infoServidor()?.rf??null), exclusoesPendentes: infoServidor()?listarExclusoesPendentesHE(infoServidor().rf):[], exclusoesPainel: [...lerHistoricoExclusoes(),...exclusoesPainel], inclusoesPendentes: infoServidor()?listarOperacoesHE(infoServidor().rf):[], calendario: { ano: mesAnoHoras().ano, resumo: resumoConsultaCalendario(mesAnoHoras().ano), fonte: 'https://brasilapi.com.br/api/feriados/v1/' + mesAnoHoras().ano, respostaRecebidaEm: consultasCalendario.get(mesAnoHoras().ano)?.em || null, somenteAvisos: !bloquearFeriadosNacionais(), bloquearFeriadosNacionais: bloquearFeriadosNacionais(), referenciasLocaisConferidasEm: '2026-10-04', avisos: linhas.map(l => ({ data: l.data, aviso: avisoCalendario(l.data) })).filter(l => l.aviso) }, linhas, auditoria };
         dados.avisosHistorico=[...avisosHistoricoHE];if(avisosHistoricoHE.length)mensagem('warning','Relatório exportado com os dados válidos. '+avisosHistoricoHE.length+' registro(s) do histórico não puderam ser lidos e foram preservados.');
@@ -5059,7 +5069,7 @@
     renderAuditoria();
     atualizarAvisoRascunho();
 
-    console.log('[HE Lote] Versão 4.6 beta 23 carregada.' + (MODO_SIMULACAO ? ' MODO SIMULAÇÃO.' : ''));
+    console.log('[HE Lote] Versão 4.6 beta 24 carregada.' + (MODO_SIMULACAO ? ' MODO SIMULAÇÃO.' : ''));
     }
 
     // ---------------------------------------------------------------------
@@ -5558,6 +5568,12 @@
                 color: #666;
                 text-align: center;
             }
+            .helq-original-readonly { margin-top: 12px; padding: 12px; border: 1px solid #dcc37f; background: #fffaf0; }
+            .helq-original-readonly h3 { margin: 0 0 5px; font-size: 14px; color: #654807; }
+            .helq-original-readonly p { margin: 0 0 9px; color: #654807; font-size: 12px; }
+            .helq-original-readonly .helq-table-wrap { max-height: 440px; }
+            .helq-original-readonly .helq-table { min-width: 1150px; text-align: left; }
+            .helq-original-readonly .helq-table td { white-space: nowrap; }
 
             .helq-modal-overlay {
                 display: none;
@@ -5662,7 +5678,7 @@
             <div class="helq-header">
                 <div>
                     <h1>Consulta de Horas Extras</h1>
-                    <div class="helq-subtitle">Consulta, conferência e exclusão por lançamento · <strong>v4.6 beta 23</strong></div>
+                    <div class="helq-subtitle">Consulta, conferência e exclusão por lançamento · <strong>v4.6 beta 24</strong></div>
                 </div>
                 <a class="helq-back" href="${voltarHref}">← Voltar</a>
             </div>
@@ -5746,6 +5762,12 @@
                         </table>
                     </div>
                     <div id="helqSemResultados" class="helq-empty" style="display:none">Nenhum lançamento exibido. Informe o registro e o período e clique em Consultar.</div>
+                    <section id="helqOriginalLeitura" class="helq-original-readonly" style="display:none" aria-label="Registros originais não confirmados">
+                        <h3>Registros do sistema original · somente leitura</h3>
+                        <p>Os dados abaixo foram retornados pelo sistema, mas os totais não foram confirmados. Excluir e copiar resumo continuam bloqueados.</p>
+                        <p>Totais exibidos pelo sistema: HE 50% <strong id="helqOriginalTotal50">—</strong> · HE 100% <strong id="helqOriginalTotal100">—</strong></p>
+                        <div class="helq-table-wrap"><table class="helq-table" id="helqOriginalTabela"></table></div>
+                    </section>
                     <div id="helqLegenda" class="helq-legend">
                         <span class="helq-legend-item"><span class="helq-dot helq-dot-weekend"></span> Sábado/domingo</span>
                         <span class="helq-legend-item"><span class="helq-dot helq-dot-he100"></span> Possui HE 100%</span>
@@ -5833,6 +5855,30 @@
         function limparStatus() {
             status.className = 'helq-status';
             status.textContent = '';
+        }
+
+        const originalLeitura=document.getElementById('helqOriginalLeitura');
+        function mostrarOriginalNaoConfirmado(){
+            const tabela=document.getElementById('helqOriginalTabela');
+            tabela.replaceChildren();
+            if(gridOriginal?.rows?.length){
+                [...gridOriginal.rows].forEach((origem,indice)=>{
+                    const linha=document.createElement('tr');
+                    [...origem.cells].forEach(celula=>{
+                        const destino=document.createElement(indice===0?'th':'td');
+                        destino.textContent=celula.textContent.trim();
+                        linha.appendChild(destino);
+                    });
+                    tabela.appendChild(linha);
+                });
+            }else{
+                const linha=document.createElement('tr'),celula=document.createElement('td');
+                celula.textContent='Nenhuma linha original disponível nesta resposta.';
+                linha.appendChild(celula);tabela.appendChild(linha);
+            }
+            document.getElementById('helqOriginalTotal50').textContent=total50Original?.textContent.trim()||'—';
+            document.getElementById('helqOriginalTotal100').textContent=total100Original?.textContent.trim()||'—';
+            originalLeitura.style.display='block';
         }
 
         function escaparHtml(valor) {
@@ -6029,7 +6075,9 @@
                 }
             }
             const l50=doc.querySelector('#L50'),l100=doc.querySelector('#L100');
-            if(!l50||!l100||totalSegundosConsulta(l50.textContent)!==s50||totalSegundosConsulta(l100.textContent)!==s100)throw Error('Os totais não correspondem aos registros; a consulta pode estar incompleta');
+            if(!l50||!l100)throw Error('A consulta não trouxe os totais; não é possível confirmar que está completa');
+            const total50=totalSegundosConsulta(l50.textContent),total100=totalSegundosConsulta(l100.textContent);
+            if(total50!==s50||total100!==s100)throw erroTotaisConsultaHE(mapa.size,s50,total50,l50.textContent,s100,total100,l100.textContent);
             return mapa;
         }
         function consultaAtualUtilizavel() {
@@ -6082,6 +6130,7 @@
         }
         const assinaturaConsulta=r=>JSON.stringify([r?.registro&&normalizarRFConsulta(r.registro),r?.nome,r?.data,r?.entrada,r?.saidaAl,r?.retornoAl,r?.saida,r?.he50,r?.he100,segundosConsulta(r?.adNoturno||'00:00')]);
         function aplicarResultadoConsulta(resultado) {
+            originalLeitura.style.display='none';
             registros=[...resultado.mapa.values()].sort((a,b)=>a.dataObj-b.dataObj);
             total50=minutosParaDuracao(registros.reduce((s,r)=>s+segundosConsulta(r.he50),0)/60);total100=minutosParaDuracao(registros.reduce((s,r)=>s+segundosConsulta(r.he100),0)/60);totalGeral=minutosParaDuracao(registros.reduce((s,r)=>s+r.totalDiaMin,0));
             ['50','100','Geral'].forEach(k=>document.getElementById('helqTotal'+k).textContent=k==='50'?total50:k==='100'?total100:totalGeral);
@@ -6129,8 +6178,8 @@
             const css=document.createElement('style');css.textContent='.helq-modal{font-family:Arial,sans-serif}.helq-modal-warning{font-weight:400}#helqExcluirModal{padding:12px;box-sizing:border-box;overflow:hidden}#helqExcluirModal.visible{display:flex;align-items:center;justify-content:center}#helqExcluirModal .helq-modal{width:min(720px,100%);max-width:720px;max-height:calc(100dvh - 24px);margin:0;display:flex;flex-direction:column;min-height:0}#helqExcluirModal .helq-modal-head,#helqExcluirModal .helq-modal-actions{flex:none}#helqExcluirModal .helq-modal-body{display:flex;flex-direction:column;min-height:0;padding:12px;gap:10px}#helqExcluirModal .helq-modal-warning{margin:0;padding:7px 10px;flex:none}.helq-ex-summary{flex:none}.helq-ex-person{display:flex;flex-direction:column;gap:4px}.helq-ex-person small,.helq-ex-totals small{color:#59666f;font-size:11px}.helq-ex-person strong{font-size:15px}.helq-ex-person span{font-size:12px;color:#526273}.helq-ex-totals{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.helq-ex-totals>div{background:#f2f4f5;padding:7px 9px;display:flex;flex-direction:column;gap:3px}.helq-ex-totals>div:last-child{background:#edf3f8}.helq-ex-list-title{font-size:12px;font-weight:700;flex:none}#helqListaExcluir{margin:0;max-height:320px;overflow:auto;min-height:0;flex:0 1 auto;border:1px solid #d1d5d8}#helqListaExcluir>div{display:grid;grid-template-columns:100px 1fr 80px;gap:8px;padding:7px 9px;border-bottom:1px solid #e5e7eb;font-size:12px;align-items:center}#helqListaExcluir>div:last-child{border-bottom:0}#helqListaExcluir b{text-align:right;white-space:nowrap}#helqExProgresso{margin:0;flex:none}#helqExProgresso:empty{display:none}@media(max-width:500px){#helqListaExcluir>div{grid-template-columns:1fr auto}#helqListaExcluir>div span{grid-column:1/-1;grid-row:2}.helq-ex-totals{gap:4px}.helq-ex-totals>div{padding:6px}}#helqExProgresso{font-size:12px;color:#526273}.helq-modal-grid .value{overflow-wrap:anywhere}.helq-filter-dirty{opacity:.6}@media(max-width:650px){.helq-table{min-width:0}.helq-table th,.helq-table td{padding:6px 4px}.helq-summary-grid{grid-template-columns:1fr 1fr}.helq-person{grid-column:1/-1}.helq-row-actions{flex-direction:column}.helq-day{display:block}.helq-table th:nth-child(7),.helq-table th:nth-child(8),.helq-table td:nth-child(7),.helq-table td:nth-child(8){display:none}.helq-table th:nth-child(n+3):nth-child(-n+6),.helq-table td:nth-child(n+3):nth-child(-n+6){display:none}}';document.head.appendChild(css);
             const grid=excluirModal.querySelector('.helq-modal-grid');grid.className='helq-ex-summary';grid.innerHTML='<div class="helq-ex-person"><small>Servidor</small><strong id="helqExServidor"></strong><span>RF <b id="helqExRF"></b> · Folha <b id="helqExFolha"></b></span></div><div class="helq-ex-totals"><div><small>HE 50%</small><b id="helqEx50"></b></div><div><small>HE 100%</small><b id="helqEx100"></b></div><div><small>Total selecionado</small><b id="helqExTotal"></b></div></div><span hidden id="helqExData"></span><span hidden id="helqExDia"></span><span hidden id="helqExHorario"></span>';grid.insertAdjacentHTML('afterend','<div class="helq-ex-list-title">Dias selecionados e horários</div><div id="helqListaExcluir" tabindex="0" aria-label="Dias selecionados para exclusão"></div><p id="helqExProgresso" role="status"></p>');excluirModal.querySelector('.helq-modal-warning').textContent='Confira os dias selecionados antes de excluir.';status.setAttribute('role','status');
             try{const mapa=validarDocumentoConsulta(document,contextoConsulta);consultaVerificada=true;aplicarResultadoConsulta({mapa});if(!registros.length)mostrarStatus('info',contextoConsulta.rf?'Nenhum lançamento encontrado para este servidor e período.':'Informe o registro e o período para consultar.');}
-            catch(e){consultaVerificada=false;document.getElementById('helqTotal50').textContent='—';document.getElementById('helqTotal100').textContent='—';document.getElementById('helqTotalGeral').textContent='—';document.getElementById('helqContagem').textContent='—';document.getElementById('helqTituloContagem').textContent='Dados não confirmados';tabelaWrap.style.display='none';vazio.style.display='none';copiarResumo.disabled=true;mostrarStatus('warning','Consulta não confirmada: '+e.message+'. Consulte novamente antes de usar os resultados.');}
-            const mudou=()=>{selecionadosConsulta.clear();tabelaBody.querySelectorAll('.helq-selecao').forEach(el=>el.checked=false);tabelaWrap.classList.toggle('helq-filter-dirty',!mesmoContextoConsulta());if(!mesmoContextoConsulta())mostrarStatus('warning','Filtros alterados. Clique em Consultar para atualizar os resultados.');else if(consultaVerificada)limparStatus();atualizarSelecaoConsulta();};
+            catch(e){consultaVerificada=false;document.getElementById('helqTotal50').textContent='—';document.getElementById('helqTotal100').textContent='—';document.getElementById('helqTotalGeral').textContent='—';document.getElementById('helqContagem').textContent='—';document.getElementById('helqTituloContagem').textContent='Dados não confirmados';tabelaWrap.style.display='none';vazio.style.display='none';legenda.style.display='none';copiarResumo.disabled=true;mostrarOriginalNaoConfirmado();mostrarStatus('warning','Consulta não confirmada: '+e.message+'. Consulte novamente antes de usar os resultados.');}
+            const mudou=()=>{selecionadosConsulta.clear();tabelaBody.querySelectorAll('.helq-selecao').forEach(el=>el.checked=false);tabelaWrap.classList.toggle('helq-filter-dirty',!mesmoContextoConsulta());originalLeitura.style.display='none';if(!mesmoContextoConsulta())mostrarStatus('warning','Filtros alterados. Clique em Consultar para atualizar os resultados.');else if(consultaVerificada)limparStatus();atualizarSelecaoConsulta();};
             [txtRegistro,mes,ano].forEach(el=>{el.addEventListener('input',mudou);el.addEventListener('change',mudou);});
             tabelaBody.addEventListener('change',e=>{if(!e.target.matches('.helq-selecao'))return;if(e.target.checked)selecionadosConsulta.add(e.target.dataset.data);else selecionadosConsulta.delete(e.target.dataset.data);atualizarSelecaoConsulta();});
             document.getElementById('helqSelecionarTodos').onchange=e=>{selecionadosConsulta.clear();if(e.target.checked)registros.forEach(r=>selecionadosConsulta.add(r.data));tabelaBody.querySelectorAll('.helq-selecao').forEach(el=>el.checked=e.target.checked);atualizarSelecaoConsulta();};
@@ -6182,7 +6231,7 @@
         iniciarMelhoriasConsulta();
         conferirExclusaoAnterior();
 
-        console.log(`[HE Consulta] Versão 4.6 beta 23 carregada. ${registros.length} lançamento(s) renderizado(s).`);
+        console.log(`[HE Consulta] Versão 4.6 beta 24 carregada. ${registros.length} lançamento(s) renderizado(s).`);
     }
 
 })();
