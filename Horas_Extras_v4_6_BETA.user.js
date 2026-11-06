@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Horas Extras - Lançamento e Consulta
 // @namespace    https://servicosead.praiagrande.sp.gov.br/
-// @version      4.6.0-beta.21
+// @version      4.6.0-beta.22
 // @description  HE variável conforme horários, consulta preventiva de datas e relatório exportável — beta para testes
 // @match        https://servicosead.praiagrande.sp.gov.br/folha/CadastroHoras.aspx*
 // @match        https://servicosead.praiagrande.sp.gov.br/folha/ConsultaRegistro.aspx*
@@ -37,8 +37,8 @@
     function operacaoInclusaoValidaHE(op){
         if(!op||typeof op.id!=='string'||!op.id||!/^\d{1,6}$/.test(String(op.rf))||typeof op.nome!=='string'||!op.nome.trim()||!op.periodo||typeof op.periodo.nome!=='string'||!op.periodo.nome.trim()||!/^\d{4}$/.test(String(op.periodo.ano)))return false;
         const a=typeof op.data==='string'&&op.data.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);if(!a)return false;const dt=new Date(Number(a[3]),Number(a[2])-1,Number(a[1]),12);if(dt.getFullYear()!==Number(a[3])||dt.getMonth()!==Number(a[2])-1||dt.getDate()!==Number(a[1]))return false;
-        const carga=op.linha?.carga||'04:00',semIntervalo=!op.linha?.saidaAl&&!op.linha?.retorno;
-        return op.linha?.data===op.data&&['04:00','06:00','08:00','12:00'].includes(carga)&&['entrada','saida'].every(k=>typeof op.linha[k]==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(op.linha[k]))&&(semIntervalo?carga!=='04:00':['saidaAl','retorno'].every(k=>typeof op.linha[k]==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(op.linha[k])))&&[op.seg50,op.seg100].every(v=>Number.isFinite(v)&&v>=0)&&op.seg50+op.seg100>0&&op.seg50+op.seg100<24*60*60;
+        const carga=op.linha?.carga||'04:00',semIntervalo=op.linha?.saidaAl===''&&op.linha?.retorno==='';
+        return op.linha?.data===op.data&&['04:00','06:00','08:00','12:00'].includes(carga)&&['entrada','saida'].every(k=>typeof op.linha[k]==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(op.linha[k]))&&(semIntervalo||['saidaAl','retorno'].every(k=>typeof op.linha[k]==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(op.linha[k])))&&[op.seg50,op.seg100].every(v=>Number.isFinite(v)&&v>=0)&&op.seg50+op.seg100>0&&op.seg50+op.seg100<24*60*60;
     }
     function lerOperacaoHE(rf,data){
         const raw=localStorage.getItem(chaveOperacaoHE(rf,data));if(!raw)return null;
@@ -263,7 +263,13 @@
     function duracaoRetornadaValida(v) {
         return typeof v === 'string' && /^\d{1,3}:\d{2}(?::\d{2})?$/.test(v) && Number(v.split(':')[1]) < 60 && (v.split(':').length === 2 || Number(v.split(':')[2]) < 60);
     }
+    function normalizarMarcaVaziaHE(valor){
+        const texto=String(valor??'').trim();
+        return texto===''||texto==='-'||texto==='—'?'':texto;
+    }
     function horariosConsultaValidosHE(c){
+        c[5]=normalizarMarcaVaziaHE(c[5]);
+        c[6]=normalizarMarcaVaziaHE(c[6]);
         const hora=v=>typeof v==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(v);
         return hora(c[4])&&hora(c[7])&&((!c[5]&&!c[6])||(hora(c[5])&&hora(c[6])));
     }
@@ -1209,7 +1215,7 @@
                 </div>
 
                 <div id="helServidorSelecionado" class="hel-server-selected"></div>
-                <div class="hel-note"><details id="helRegraCalculo"><summary>Como é calculado</summary><div class="hel-calculo-info"><p>Com carga 04:00, somamos o tempo trabalhado antes e depois do almoço, sem contar o intervalo, e descontamos <strong>4 horas</strong>. Com as outras cargas, usamos a HE que o <strong>sistema oficial devolver</strong> após calcular. Nos exemplos fornecidos, sem intervalo o sistema devolveu toda a duração; com carga 08:00 e intervalo, descontou 8 horas.</p><div class="hel-calculo-exemplo"><span>Exemplo com 04:00:</span><span><b>6h</b> trabalhadas</span><span aria-hidden="true">−</span><span><b>4h</b></span><span aria-hidden="true">=</span><strong>2h extras</strong></div><p>A HE pode ser menor ou maior que 4 horas. Confira o valor devolvido pelo sistema antes de enviar.</p><p class="hel-calculo-ajuste">Se for necessário adaptar os horários para o sistema calcular corretamente, a alteração será mostrada antes de você confirmar.</p></div></details></div>
+                <div class="hel-note"><details id="helRegraCalculo"><summary>Como é calculado</summary><div class="hel-calculo-info"><p>Em dia útil com quatro horários e carga 04:00, mantemos a regra existente: tempo trabalhado menos <strong>4 horas</strong>. Nos demais casos, usamos a HE que o <strong>sistema oficial devolver</strong> após calcular. Sem marcações de almoço, não inventamos intervalo: confira se a sua unidade exige algum desconto antes de enviar.</p><div class="hel-calculo-exemplo"><span>Exemplo tradicional:</span><span><b>6h</b> trabalhadas</span><span aria-hidden="true">−</span><span><b>4h</b></span><span aria-hidden="true">=</span><strong>2h extras</strong></div><p>A HE pode ser menor ou maior que 4 horas. Confira o valor devolvido pelo sistema antes de enviar.</p><p class="hel-calculo-ajuste">Se for necessário adaptar os horários para o sistema calcular corretamente, a alteração será mostrada antes de você confirmar.</p></div></details></div>
                 <div id="helConsultaCompacta" style="margin-top:8px">
                     <button type="button" class="hel-btn" id="helConsultarExistentes">Atualizar</button>
                     <a class="hel-btn" href="ConsultaRegistro.aspx" target="_blank" rel="noopener">Abrir consulta</a>
@@ -1260,11 +1266,11 @@
                 </div>
                 <div class="hel-quick-days">
                     <span class="hel-quick-days-label">Preenchimento rápido:</span>
-                    <button type="button" class="hel-btn hel-btn-quick" id="helMesInteiro" title="Adiciona todos os dias de segunda a sexta do mês selecionado.">Mês inteiro</button>
-                    <button type="button" class="hel-btn hel-btn-quick" id="helPrimeiraQuinzena" title="Adiciona os dias de segunda a sexta do dia 1 ao dia 15.">1ª quinzena</button>
-                    <button type="button" class="hel-btn hel-btn-quick" id="helSegundaQuinzena" title="Adiciona os dias de segunda a sexta do dia 16 ao fim do mês.">2ª quinzena</button>
+                    <button type="button" class="hel-btn hel-btn-quick" id="helMesInteiro" title="Adiciona todos os dias do mês, inclusive fins de semana.">Mês inteiro</button>
+                    <button type="button" class="hel-btn hel-btn-quick" id="helPrimeiraQuinzena" title="Adiciona todos os dias do dia 1 ao dia 15.">1ª quinzena</button>
+                    <button type="button" class="hel-btn hel-btn-quick" id="helSegundaQuinzena" title="Adiciona todos os dias do dia 16 ao fim do mês.">2ª quinzena</button>
                 </div>
-                <div class="hel-note">Atalhos ignoram finais de semana e dias já cadastrados. Datas do calendário são avisos: confira o expediente.</div>
+                <div class="hel-note">Atalhos incluem finais de semana e feriados. Para registrar só entrada e saída, deixe os dois campos de almoço vazios.</div>
                 <div id="helAvisosLista" class="hel-input-notices"></div>
 
                 <div class="hel-table-wrap">
@@ -1800,8 +1806,12 @@
         return fim - inicio;
     }
 
+    function calculoPeloSistema(linha) {
+        return (linha.carga||CARGA_SISTEMA)!==CARGA_SISTEMA || !linha.saidaAl || !linha.retorno || diaSemanaEhFimDeSemana(linha.data) || !!feriadoDaData(linha.data);
+    }
+
     function duracoesLinha(linha) {
-        if ((linha.carga||CARGA_SISTEMA)!==CARGA_SISTEMA) {
+        if (calculoPeloSistema(linha)) {
             const entrada=minutosHora(linha.entrada),saida=minutosHora(linha.saida);
             if(entrada===null||saida===null)return {primeiro:null,segundo:null,intervalo:null,total:null};
             if(!linha.saidaAl&&!linha.retorno){const fim=saida<=entrada?saida+1440:saida;return {primeiro:fim-entrada,segundo:0,intervalo:0,total:fim-entrada,duracaoTotal:fim-entrada};}
@@ -1863,7 +1873,7 @@
             return { ok: false, erro, linhaSistema: null, ajustado: false };
         }
 
-        if ((linha.carga||CARGA_SISTEMA)!==CARGA_SISTEMA) {
+        if (calculoPeloSistema(linha)) {
             return {ok:true,ajustado:false,linhaSistema:{...linha},horarioInformado:horarioLinhaTexto(linha),horarioSistema:horarioLinhaTexto(linha)};
         }
 
@@ -1930,11 +1940,8 @@
         const fimSemana = diaSemanaEhFimDeSemana(data);
         dia.textContent = textoDia === '-' ? '· -' : `· ${textoDia}`;
         dia.classList.toggle('weekend', fimSemana);
-        tr.classList.toggle('hel-weekend-invalid', fimSemana && cargaSelecionada()===CARGA_SISTEMA);
+        tr.classList.remove('hel-weekend-invalid');
         tr.classList.toggle('hel-future', dataEhFutura(data));
-        if (fimSemana && cargaSelecionada()===CARGA_SISTEMA && tr.dataset.incluido !== '1' && tr.dataset.incerto !== '1') {
-            aplicarStatusLinha(tr, 'Fim de semana — lançamento não permitido', 'hel-error');
-        }
     }
 
     function aplicarStatusLinha(tr, texto, classe = '') {
@@ -1951,6 +1958,9 @@
         if (!opcoes.restaurando) iniciarNovoLoteEfetivoSeNecessario();
 
         const tr = document.createElement('tr');
+        const padraoComAlmoco=cargaSelecionada()===CARGA_SISTEMA&&!diaSemanaEhFimDeSemana(data)&&!feriadoDaData(data);
+        const saidaAlInicial=dados.saidaAl??(padraoComAlmoco?valor('helPadSaidaAl'):'');
+        const retornoInicial=dados.retorno??(padraoComAlmoco?valor('helPadRetorno'):'');
         tr.innerHTML = `
             <td>
                 <div class="hel-data-combined">
@@ -1959,8 +1969,8 @@
                 </div>
             </td>
             <td><input class="hel-hora hel-entrada" value="${escaparHtml(dados.entrada || valor('helPadEntrada') || '07:00')}"></td>
-            <td><input class="hel-hora hel-saida-al" value="${escaparHtml(dados.saidaAl ?? valor('helPadSaidaAl') ?? '11:00')}"></td>
-            <td><input class="hel-hora hel-retorno" value="${escaparHtml(dados.retorno ?? valor('helPadRetorno') ?? '11:00')}"></td>
+            <td><input class="hel-hora hel-saida-al" value="${escaparHtml(saidaAlInicial)}"></td>
+            <td><input class="hel-hora hel-retorno" value="${escaparHtml(retornoInicial)}"></td>
             <td><input class="hel-hora hel-saida" value="${escaparHtml(dados.saida || valor('helPadSaida') || '15:00')}"></td>
             <td class="hel-he hel-prevista">-</td>
             <td class="hel-he hel-he50">-</td>
@@ -2073,6 +2083,8 @@
             const total = Number(dados.total || 0);
             const avisos = [];
             if (horarioDifereDoPadrao(tr)) avisos.push('horário diferente do padrão');
+            if (!dadosLinha(tr).saidaAl && !dadosLinha(tr).retorno) avisos.push('sem intervalo · confira regra da unidade');
+            if (MODO_SIMULACAO && calculoPeloSistema(dadosLinha(tr))) avisos.push('simulação ilustrativa');
             if (dataEhFutura(dadosLinha(tr).data)) avisos.push('data futura');
             if (heEsperadaSegundos(dadosLinha(tr))===null ? total>0 : total === heEsperadaSegundos(dadosLinha(tr))) {
                 aplicarStatusLinha(tr, avisos.length ? `Conferido · ${avisos.join(' · ')}` : '✓ Conferido', avisos.length ? 'hel-warning' : 'hel-ok');
@@ -2199,11 +2211,6 @@
                 return;
             }
 
-            if (diaSemanaEhFimDeSemana(data) && cargaSelecionada()===CARGA_SISTEMA) {
-                avisos.push(`${dataCurta(data)} · ${diaSemanaTexto(data)} — fim de semana, lançamento não permitido`);
-                return;
-            }
-
             if (existentes.has(data)) {
                 avisos.push(`${dataCurta(data)} — já estava na lista`);
                 return;
@@ -2248,7 +2255,6 @@
 
         const avisos = [];
         let adicionados = 0;
-        let ignoradosFimSemana = 0;
         const feriadosIgnorados = [];
         let duplicados = 0;
         let jaCadastrados = 0;
@@ -2258,11 +2264,6 @@
 
             if (!dataValida(data)) continue;
             if (registrosExistentes.has(data)) { jaCadastrados++; continue; }
-
-            if (diaSemanaEhFimDeSemana(data) && cargaSelecionada()===CARGA_SISTEMA) {
-                ignoradosFimSemana++;
-                continue;
-            }
 
             if(bloquearFeriadosNacionais()&&consultasCalendario.get(ref.ano)?.mapa.get(data)?.nacional){feriadosIgnorados.push(data);continue;}
             if (existentes.has(data)) {
@@ -2282,10 +2283,7 @@
 
         if (jaCadastrados) avisos.push(jaCadastrados + ' dia(s) já cadastrados no sistema não foram adicionados');
         if (duplicados) {
-            avisos.push(`${duplicados} dia(s) útil(eis) já estavam na lista e foram mantidos apenas uma vez`);
-        }
-        if (ignoradosFimSemana) {
-            avisos.push(`${ignoradosFimSemana} sábado(s)/domingo(s) foram ignorados automaticamente`);
+            avisos.push(`${duplicados} dia(s) já estavam na lista e foram mantidos apenas uma vez`);
         }
 
         mostrarAvisosEntrada(jaCadastrados ? [jaCadastrados + (jaCadastrados === 1 ? ' dia já está cadastrado e ficou fora desta lista.' : ' dias já estão cadastrados e ficaram fora desta lista.') + ' Se algum estiver errado, use Excluir em Ver cadastrados ou em Consulta e exclusão; depois cadastre novamente.'] : []);
@@ -2350,13 +2348,13 @@
     }
 
     function heEsperadaSegundos(linha) {
-        if ((linha.carga||CARGA_SISTEMA)!==CARGA_SISTEMA) return null;
+        if (calculoPeloSistema(linha)) return null;
         const dur = duracoesLinha(linha);
         return dur.total === null ? 0 : Math.max(0, dur.total - JORNADA_NORMAL_MINUTOS) * 60;
     }
 
     function validarHorarios(linha) {
-        if ((linha.carga||CARGA_SISTEMA)!==CARGA_SISTEMA) {
+        if (calculoPeloSistema(linha)) {
             if(!CARGAS_DISPONIVEIS.includes(linha.carga)||![...sistemaCarga.options].some(o=>o.value===linha.carga))return 'Carga horária indisponível no formulário oficial';
             if(!horaValida(linha.entrada))return 'Entrada inválida';
             if(!horaValida(linha.saida))return 'Saída inválida';
@@ -2390,10 +2388,6 @@
         }
 
         if(!ignorarPendencia){try{const info=infoServidor();if(info&&listarExclusoesPendentesHE(info.rf).some(o=>o.data===linha.data))return 'Exclusão pendente de confirmação — verifique as pendências';if(info&&erroMigracaoHE(info.rf))return erroMigracaoHE(info.rf);if(info)listarOperacoesHE(info.rf);if(info&&lerOperacaoHE(info.rf,linha.data))return 'Inclusão pendente de confirmação — verifique as pendências';}catch{return 'Não foi possível ler os bloqueios de inclusão — envio impedido';}}
-        if (diaSemanaEhFimDeSemana(linha.data) && (linha.carga||CARGA_SISTEMA)===CARGA_SISTEMA) {
-            return 'Fim de semana — lançamento não permitido';
-        }
-
         if(bloquearFeriadosNacionais()){
             const c=consultasCalendario.get(ref.ano);
             if(!calendarioNacionalConfirmado(ref.ano))return 'Feriados não confirmados — consulte novamente';
@@ -2476,6 +2470,8 @@
                 const total = Number(tr.dataset.total || 0);
                 const avisos = [];
                 if (tr.dataset.horarioDiferente === '1') avisos.push('horário diferente do padrão');
+                if (!dadosLinha(tr).saidaAl && !dadosLinha(tr).retorno) avisos.push('sem intervalo · confira regra da unidade');
+                if (MODO_SIMULACAO && calculoPeloSistema(dadosLinha(tr))) avisos.push('simulação ilustrativa');
                 if (tr.dataset.dataFutura === '1') avisos.push('data futura');
                 if (heEsperadaSegundos(dadosLinha(tr))===null ? total>0 : total === heEsperadaSegundos(dadosLinha(tr))) {
                     aplicarStatusLinha(tr, avisos.length ? `Conferido · ${avisos.join(' · ')}` : '✓ Conferido', avisos.length ? 'hel-warning' : 'hel-ok');
@@ -2646,7 +2642,8 @@
             await sleep(80);
             const carga=linha.carga||CARGA_SISTEMA;
             const minutosTrabalhados=duracoesLinha(linha).total;
-            const totalSimulado=carga===CARGA_SISTEMA?heEsperadaSegundos(linha):
+            const previsao=heEsperadaSegundos(linha);
+            const totalSimulado=previsao!==null?previsao:
                 Math.max(0,minutosTrabalhados-(linha.saidaAl?minutosHora(carga):0))*60;
             if (acao === 'calcular') {
                 // Simulação apenas para desenvolvimento. Em produção esta
@@ -2654,7 +2651,7 @@
                 const entrada = minutosHora(linha.entrada);
                 const saida = minutosHora(linha.saida);
                 const cargaMin = minutosHora(CARGA_SISTEMA);
-                const totalSeg = carga!==CARGA_SISTEMA ? totalSimulado : (entrada === null || saida === null || cargaMin === null || saida <= entrada)
+                const totalSeg = previsao===null ? totalSimulado : (entrada === null || saida === null || cargaMin === null || saida <= entrada)
                     ? 0 : Math.max(0, (saida - entrada - cargaMin) * 60);
                 return {
                     html: '<!-- simulação: cálculo -->',
@@ -2819,7 +2816,7 @@
         });
 
         return {
-            ok: resultado.retornado && resultado.total>0 && (linha.carga===CARGA_SISTEMA ? resultado.total===heEsperadaSegundos(linha) : true),
+            ok: resultado.retornado && resultado.total>0 && (heEsperadaSegundos(linha)===null || resultado.total===heEsperadaSegundos(linha)),
             resposta,
             resultado,
             compat,
@@ -2944,10 +2941,7 @@
             if (tr.dataset.incluido === '1') incluidos++;
         });
 
-        const elegiveis = linhas.filter(tr => {
-            const data = dadosLinha(tr).data;
-            return dataValida(data) && (cargaSelecionada()!==CARGA_SISTEMA||!diaSemanaEhFimDeSemana(data));
-        });
+        const elegiveis = linhas.filter(tr => dataValida(dadosLinha(tr).data));
         const previstos = elegiveis.filter(tr => !linhaJaCadastrada(tr) && tr.dataset.incluido !== '1' && !validarLinhaCritica(dadosLinha(tr))).reduce((sum, tr) => sum + (heEsperadaSegundos(dadosLinha(tr))??Number(tr.dataset.total||0)), 0);
         document.getElementById('helResumoInformados').textContent = linhas.length;
         document.getElementById('helResumoCalculados').textContent = calculados;
@@ -2955,14 +2949,10 @@
         document.getElementById('helResumo100').textContent = formatarSegundos(total100);
         document.getElementById('helResumoTotal').textContent = formatarSegundos(total50 + total100);
         document.getElementById('helResumoIncluidos').textContent = incluidos;
-        const bloqueadosFimSemana = linhas.length - elegiveis.length;
-        const rotuloHoras=cargaSelecionada()===CARGA_SISTEMA?'previstas':MODO_SIMULACAO?'calculadas na simulação até agora':'calculadas pelo sistema até agora';
-        document.getElementById('helResumoHumano').textContent = bloqueadosFimSemana
-            ? `${linhas.length} dia(s) informados · ${elegiveis.length} dia(s) útil(eis) · HE pendente: ${formatarHorasHumanas(previstos)} ${rotuloHoras}`
-            : `${linhas.length} dia(s) · HE pendente: ${formatarHorasHumanas(previstos)} ${rotuloHoras}`;
-        document.getElementById('helQtdPrevista').textContent = bloqueadosFimSemana
-            ? `${elegiveis.length} elegível(is) · ${formatarHorasHumanas(previstos)} ${rotuloHoras}`
-            : `${linhas.length} dia(s) · ${formatarHorasHumanas(previstos)} ${rotuloHoras}`;
+        const todasPrevistas=elegiveis.every(tr=>heEsperadaSegundos(dadosLinha(tr))!==null);
+        const rotuloHoras=todasPrevistas?'previstas':MODO_SIMULACAO?'calculadas na simulação até agora':'calculadas pelo sistema até agora';
+        document.getElementById('helResumoHumano').textContent = `${linhas.length} dia(s) · HE pendente: ${formatarHorasHumanas(previstos)} ${rotuloHoras}`;
+        document.getElementById('helQtdPrevista').textContent = `${elegiveis.length} dia(s) válido(s) · ${formatarHorasHumanas(previstos)} ${rotuloHoras}`;
 
         const estado = document.getElementById('helConferenciaEstado');
         const incertos = linhas.filter(tr => tr.dataset.incerto === '1').length;
@@ -3241,7 +3231,7 @@
         const rows=[...document.querySelectorAll('#helLinhas tr')];
         const pending=rows.filter(tr=>tr.dataset.incluido!=='1' && !linhaJaCadastrada(tr));
         const expected=pending.filter(tr=>!validarLinhaCritica(dadosLinha(tr))).reduce((sum,tr)=>sum+(heEsperadaSegundos(dadosLinha(tr))??Number(tr.dataset.total||0)),0);
-        document.getElementById('helFooterResumo').textContent=pending.length+' dia(s) pendente(s) · '+formatarSegundos(expected)+(cargaSelecionada()===CARGA_SISTEMA?' previstas':' calculadas');
+        document.getElementById('helFooterResumo').textContent=pending.length+' dia(s) pendente(s) · '+formatarSegundos(expected)+(pending.every(tr=>heEsperadaSegundos(dadosLinha(tr))!==null)?' previstas':' calculadas');
         document.getElementById('helFooterEstado').textContent=consultando ? 'Consultando dias cadastrados…' : !confirmed ? 'Consulta pendente · envio bloqueado' : rows.some(tr=>tr.dataset.incerto==='1') ? 'Inclusão sem confirmação · conferir no sistema' : rows.some(tr=>tr.dataset.incluido==='1' && tr.dataset.conferenciaConsulta!=='conferido') ? 'Resultado requer revisão · use Verificar no sistema' : todosProntosParaEnviar() ? 'Conferido · pronto para enviar' : pending.length ? 'Confira os horários e calcule antes do envio' : 'Nenhum dia pendente';
     }
 
@@ -3260,9 +3250,9 @@
     function iniciarOpcaoFeriados(){
         const label=document.createElement('label');label.style.cssText='display:inline-flex;align-items:center;gap:5px;white-space:nowrap';label.innerHTML='<input type="checkbox" id="helConsiderarFeriados" title="Marcada: permite cadastrar feriados nacionais. Desmarcada: bloqueia os feriados nacionais consultados."> Considerar feriados?';
         app.querySelector('.hel-quick-days').appendChild(label);
-        const input=document.getElementById('helConsiderarFeriados');input.checked=false;
+        const input=document.getElementById('helConsiderarFeriados');input.checked=true;
         const note=app.querySelector('.hel-quick-days').nextElementSibling;
-        const explicar=()=>{if(note)note.textContent=bloquearFeriadosNacionais()?'Feriados nacionais bloqueados. Atalhos ignoram essas datas; feriados locais e pontos facultativos continuam como avisos.':'Feriados permitidos. Atalhos ignoram finais de semana e dias já cadastrados. Confira os avisos do calendário.';};
+        const explicar=()=>{if(note)note.textContent=(bloquearFeriadosNacionais()?'Feriados nacionais bloqueados por sua escolha; finais de semana continuam disponíveis.':'Feriados e finais de semana disponíveis.')+' Para registrar só entrada e saída, deixe ambos os campos de almoço vazios e confira a HE devolvida pelo sistema.';};
         input.onchange=async()=>{if(processando||consultando)return;invalidarPreviaTodas();explicar();if(!input.checked)await conferirFeriadosParaAcao();atualizarResumo();};explicar();
     }
 
@@ -3367,10 +3357,12 @@
     function renderAvisosModal(pendentes,horariosDiferentes,futuras) {
         const box=document.getElementById('helModalOutrosAvisos'),ano=mesAnoHoras().ano;
         const datas=pendentes.map(tr=>dadosLinha(tr).data).filter(avisoCalendario);
+        const semIntervalo=pendentes.map(tr=>dadosLinha(tr)).filter(l=>!l.saidaAl&&!l.retorno);
         const bloco=(titulo,conteudo,classe='')=>'<details class="hel-review-block '+classe+'"><summary>'+escaparHtml(titulo)+'</summary><div>'+conteudo+'</div></details>';
         const lista=ds=>ds.map(d=>'<span class="hel-review-date">'+escaparHtml(d)+'</span>').join('');
         let html='';
         if(datas.length)html+=bloco('Feriados e pontos facultativos · '+datas.length+' '+(datas.length===1?'data':'datas')+' para conferir',datas.map(d=>'<div>'+escaparHtml(d)+' · '+escaparHtml(rotuloCalendario(d))+'</div>').join('')+'<p>Confira expediente e autorização da unidade.</p>','hel-review-attention');
+        if(semIntervalo.length)html+=bloco('Sem marcações de almoço · '+semIntervalo.length+' '+(semIntervalo.length===1?'dia':'dias'),lista(semIntervalo.map(l=>l.data))+'<p>O primeiro e o último horários foram enviados sem intervalo presumido. Confira se há desconto obrigatório na sua unidade e se a HE devolvida pelo sistema está correta.</p>','hel-review-attention');
         if(futuras.length)html+=bloco('Datas futuras · '+futuras.length+' '+(futuras.length===1?'dia':'dias'),lista(futuras.map(tr=>dadosLinha(tr).data)),'hel-review-attention');
         if(horariosDiferentes.length)html+=bloco('Horários diferentes do padrão · '+horariosDiferentes.length+' '+(horariosDiferentes.length===1?'dia':'dias'),lista(horariosDiferentes.map(tr=>dadosLinha(tr).data)));
         const estado=consultasCalendario.get(ano),situacao=estado?.erro?'Não foi possível consultar':estado?.pendente?'Consultando':estado?.em?'Consultado':'Ainda não consultado';
@@ -3938,7 +3930,7 @@
                 heRetornada: tr.dataset.preview === '1' ? formatarSegundos(Number(tr.dataset.total || 0)) : null,
                 registroExistente: cadastrado || null, conferenciaConsulta: tr.dataset.conferenciaConsulta || '', registroVerificado: tr.dataset.registroVerificado ? JSON.parse(tr.dataset.registroVerificado) : null, status: tr.querySelector('.hel-status').textContent };
         });
-        const dados = { versao: '4.6.0-beta.21', simulacao: MODO_SIMULACAO, exportadoEm: new Date().toISOString(),
+        const dados = { versao: '4.6.0-beta.22', simulacao: MODO_SIMULACAO, exportadoEm: new Date().toISOString(),
             contextoAtual: metaAuditoriaAtual(), contextoAuditoria: auditoriaMeta, consultaConfirmada,
             contextoConsulta: consultaContexto, recuperacoesRascunhos: listarRecuperacoesHE(infoServidor()?.rf??null), exclusoesPendentes: infoServidor()?listarExclusoesPendentesHE(infoServidor().rf):[], exclusoesPainel: [...lerHistoricoExclusoes(),...exclusoesPainel], inclusoesPendentes: infoServidor()?listarOperacoesHE(infoServidor().rf):[], calendario: { ano: mesAnoHoras().ano, resumo: resumoConsultaCalendario(mesAnoHoras().ano), fonte: 'https://brasilapi.com.br/api/feriados/v1/' + mesAnoHoras().ano, respostaRecebidaEm: consultasCalendario.get(mesAnoHoras().ano)?.em || null, somenteAvisos: !bloquearFeriadosNacionais(), bloquearFeriadosNacionais: bloquearFeriadosNacionais(), referenciasLocaisConferidasEm: '2026-10-04', avisos: linhas.map(l => ({ data: l.data, aviso: avisoCalendario(l.data) })).filter(l => l.aviso) }, linhas, auditoria };
         dados.avisosHistorico=[...avisosHistoricoHE];if(avisosHistoricoHE.length)mensagem('warning','Relatório exportado com os dados válidos. '+avisosHistoricoHE.length+' registro(s) do histórico não puderam ser lidos e foram preservados.');
@@ -4279,6 +4271,8 @@
                     const avisos = [];
 
                     if (tr.dataset.horarioDiferente === '1') avisos.push('horário diferente do padrão');
+                    if (!linha.saidaAl && !linha.retorno) avisos.push('sem intervalo · confira regra da unidade');
+                    if (MODO_SIMULACAO && calculoPeloSistema(linha)) avisos.push('simulação ilustrativa');
                     if (tr.dataset.dataFutura === '1') avisos.push('data futura');
 
                     aplicarStatusLinha(
@@ -4434,7 +4428,7 @@
         }
 
         if (!todosProntosParaEnviar()) {
-            mensagem('error', cargaSelecionada()===CARGA_SISTEMA
+            mensagem('error', pendentes.every(tr=>heEsperadaSegundos(dadosLinha(tr))!==null)
                 ? 'Todos os dias pendentes precisam estar calculados com a HE prevista pelos horários antes do envio.'
                 : 'Todos os dias pendentes precisam ter o cálculo do sistema conferido antes do envio.');
             atualizarResumo();
@@ -4466,15 +4460,12 @@
             : 'Sem ajustes';
         document.getElementById('helModalHumano').textContent = `${pendentes.length} dia(s) · HE conferida: ${formatarHorasHumanas(total50+total100)}`;
 
-        const diasUteisSelecionados = linhas.filter(tr => {
-            const data = dadosLinha(tr).data;
-            return dataValida(data) && (cargaSelecionada()!==CARGA_SISTEMA||!diaSemanaEhFimDeSemana(data));
-        }).length;
+        const diasSelecionados = linhas.filter(tr => dataValida(dadosLinha(tr).data)).length;
         const jaCadastradosConhecidos = linhas.filter(tr => linhaJaCadastrada(tr)).length;
         const jaIncluidosNesteLote = linhas.filter(tr => tr.dataset.incluido === '1').length;
         const aEnviarAgora = pendentes.length;
 
-        let textoContagem = `Você selecionou ${diasUteisSelecionados} dia(s) ${cargaSelecionada()===CARGA_SISTEMA?'útil(eis)':'elegível(is)'}; ${aEnviarAgora} serão enviados`;
+        let textoContagem = `Você selecionou ${diasSelecionados} dia(s); ${aEnviarAgora} serão enviados`;
         if (jaCadastradosConhecidos) {
             textoContagem += `; ${jaCadastradosConhecidos} já estavam cadastrados`;
         }
@@ -4886,8 +4877,9 @@
             : 'Iniciar um novo lote? Os dias da lista atual serão limpos. O relatório continuará visível até você começar o próximo lote.')) return;
 
         descartarRascunhoAtual();
-        document.getElementById('helConsiderarFeriados').checked=false;
+        document.getElementById('helConsiderarFeriados').checked=true;
         document.getElementById('helLinhas').innerHTML = '';
+        document.getElementById('helConsiderarFeriados').dispatchEvent(new Event('change',{bubbles:true}));
         txtServidor.value = '';
         txtReg.value = '';
         // Mantém mês, período e horário padrão para facilitar vários servidores do mesmo mês.
@@ -4913,12 +4905,6 @@
             return;
         }
         sistemaCarga.value=cargaSelecionada();
-        for(const id of ['helMesInteiro','helPrimeiraQuinzena','helSegundaQuinzena']){
-            const el=document.getElementById(id);
-            el.title=cargaSelecionada()===CARGA_SISTEMA
-                ? 'Adiciona os dias de segunda a sexta do período indicado.'
-                : 'Adiciona todos os dias do período indicado, inclusive fins de semana.';
-        }
         invalidarPreviaTodas();
         document.querySelectorAll('#helLinhas tr').forEach(atualizarVisualData);
         atualizarResumo();
@@ -5055,7 +5041,7 @@
     renderAuditoria();
     atualizarAvisoRascunho();
 
-    console.log('[HE Lote] Versão 4.6 beta 21 carregada.' + (MODO_SIMULACAO ? ' MODO SIMULAÇÃO.' : ''));
+    console.log('[HE Lote] Versão 4.6 beta 22 carregada.' + (MODO_SIMULACAO ? ' MODO SIMULAÇÃO.' : ''));
     }
 
     // ---------------------------------------------------------------------
@@ -5139,6 +5125,9 @@
         };
 
         const normalizarTotal = valor => minutosParaDuracao(duracaoParaMinutos(valor));
+        const horarioConsultaTexto = r => !r.saidaAl&&!r.retornoAl
+            ? `${r.entrada}–${r.saida} (sem intervalo)`
+            : `${r.entrada}–${r.saidaAl} / ${r.retornoAl}–${r.saida}`;
 
         const periodoAtual = () => {
             const mesTxt = mes.options[mes.selectedIndex]?.textContent?.trim() || mes.value || '—';
@@ -5166,8 +5155,8 @@
                     diaSemana: dt ? DIAS_SEMANA[dt.getDay()] : '—',
                     fimDeSemana: dt ? (dt.getDay() === 0 || dt.getDay() === 6) : false,
                     entrada: c[4].textContent.trim(),
-                    saidaAl: c[5].textContent.trim(),
-                    retornoAl: c[6].textContent.trim(),
+                    saidaAl: normalizarMarcaVaziaHE(c[5].textContent),
+                    retornoAl: normalizarMarcaVaziaHE(c[6].textContent),
                     saida: c[7].textContent.trim(),
                     he50,
                     he100,
@@ -5662,7 +5651,7 @@
             <div class="helq-header">
                 <div>
                     <h1>Consulta de Horas Extras</h1>
-                    <div class="helq-subtitle">Consulta, conferência e exclusão por lançamento · <strong>v4.6 beta 21</strong></div>
+                    <div class="helq-subtitle">Consulta, conferência e exclusão por lançamento · <strong>v4.6 beta 22</strong></div>
                 </div>
                 <a class="helq-back" href="${voltarHref}">← Voltar</a>
             </div>
@@ -5901,7 +5890,7 @@
             document.getElementById('helqExServidor').textContent = r.nome || '—';
             document.getElementById('helqExData').textContent = r.data || '—';
             document.getElementById('helqExDia').textContent = r.diaSemana || '—';
-            document.getElementById('helqExHorario').textContent = `${r.entrada || '—'}–${r.saidaAl || '—'} / ${r.retornoAl || '—'}–${r.saida || '—'}`;
+            document.getElementById('helqExHorario').textContent = horarioConsultaTexto(r);
             document.getElementById('helqEx50').textContent = r.he50 || '00:00';
             document.getElementById('helqEx100').textContent = r.he100 || '00:00';
             document.getElementById('helqExTotal').textContent = r.totalDia || '00:00';
@@ -6052,11 +6041,11 @@
             document.getElementById('helqExServidor').textContent=rs[0].nome;
             document.getElementById('helqExData').textContent=rs.length===1?rs[0].data:rs.length+' dias selecionados';
             document.getElementById('helqExDia').textContent=rs.length===1?rs[0].diaSemana:'Veja a lista abaixo';
-            document.getElementById('helqExHorario').textContent=rs.length===1?rs[0].entrada+'–'+rs[0].saidaAl+' / '+rs[0].retornoAl+'–'+rs[0].saida:'Veja a lista abaixo';
+            document.getElementById('helqExHorario').textContent=rs.length===1?horarioConsultaTexto(rs[0]):'Veja a lista abaixo';
             document.getElementById('helqEx50').textContent=minutosParaDuracao(rs.reduce((s,r)=>s+segundosConsulta(r.he50),0)/60);
             document.getElementById('helqEx100').textContent=minutosParaDuracao(rs.reduce((s,r)=>s+segundosConsulta(r.he100),0)/60);
             document.getElementById('helqExTotal').textContent=minutosParaDuracao(rs.reduce((s,r)=>s+r.totalDiaMin,0));
-            document.getElementById('helqListaExcluir').innerHTML=rs.map(r=>'<div><strong>'+escaparHtml(r.data)+'</strong><span>'+escaparHtml(r.entrada+'–'+r.saidaAl+' / '+r.retornoAl+'–'+r.saida)+'</span><b>HE '+escaparHtml(r.totalDia)+'</b></div>').join('');
+            document.getElementById('helqListaExcluir').innerHTML=rs.map(r=>'<div><strong>'+escaparHtml(r.data)+'</strong><span>'+escaparHtml(horarioConsultaTexto(r))+'</span><b>HE '+escaparHtml(r.totalDia)+'</b></div>').join('');
             const noturno=rs.reduce((sum,r)=>sum+segundosConsulta(r.adNoturno||'00:00'),0);let n=document.getElementById('helqExNoturno');if(!n){n=document.createElement('div');n.id='helqExNoturno';n.style.cssText='font-size:12px;color:#7d2020';document.getElementById('helqListaExcluir').before(n);}n.hidden=!noturno;n.textContent=noturno?'Estes lançamentos também contêm '+minutosParaDuracao(noturno/60)+' de adicional noturno, que será excluído.':'';
             document.getElementById('helqExProgresso').textContent='';btnCancelarExclusao.textContent='Cancelar';
             btnConfirmarExclusao.disabled=false;btnConfirmarExclusao.textContent=window.__HEL_SIMULACAO__?'Excluir da simulação':'Excluir lançamento(s)';excluirModal.classList.add('visible');btnCancelarExclusao.focus();
@@ -6180,7 +6169,7 @@
         iniciarMelhoriasConsulta();
         conferirExclusaoAnterior();
 
-        console.log(`[HE Consulta] Versão 4.6 beta 21 carregada. ${registros.length} lançamento(s) renderizado(s).`);
+        console.log(`[HE Consulta] Versão 4.6 beta 22 carregada. ${registros.length} lançamento(s) renderizado(s).`);
     }
 
 })();

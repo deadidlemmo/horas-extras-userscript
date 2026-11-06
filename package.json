@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/horas-extras.test.js"
+  },
+  "devDependencies": {
+    "playwright": "1.65.0"
+  }
+}
