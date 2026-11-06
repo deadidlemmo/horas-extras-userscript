@@ -1,6 +1,6 @@
 # Horas Extras — lançamento e consulta
 
-![Tampermonkey](https://img.shields.io/badge/Userscript-Tampermonkey-161b22?style=for-the-badge&logo=tampermonkey&logoColor=9cdd64) ![Versão](https://img.shields.io/badge/versão-4.6.0--beta.22-6e9f43?style=for-the-badge)
+![Tampermonkey](https://img.shields.io/badge/Userscript-Tampermonkey-161b22?style=for-the-badge&logo=tampermonkey&logoColor=9cdd64) ![Versão](https://img.shields.io/badge/versão-4.6.0--beta.23-6e9f43?style=for-the-badge)
 
 Userscript criado por **Nilson Cruz** para tornar mais simples o cadastro e a conferência de horas extras no navegador. É um complemento independente: os registros oficiais continuam no sistema original.
 
@@ -13,6 +13,7 @@ Userscript criado por **Nilson Cruz** para tornar mais simples o cadastro e a co
 - Aceita sábados, domingos, feriados e jornadas com apenas entrada e saída em todas as cargas. Nesses casos, envia os horários informados e usa a HE devolvida pelo sistema oficial, sem presumir intervalo de almoço ou substituir HE pela duração total.
 - Os atalhos de dias incluem fins de semana e feriados; desmarcar “Considerar feriados?” mantém a opção de bloquear feriados nacionais.
 - Consulta dias já registrados e sinaliza possíveis duplicidades ou divergências.
+- Na conferência da Consulta, reconhece HE em horas e minutos, horas decimais e uma categoria de HE vazia quando a outra contém valor. Compara cada categoria aos totais oficiais antes de liberar o envio.
 - Organiza relatórios e exclusões, com confirmação e conferência do resultado.
 - Consulta feriados nacionais pela BrasilAPI e apresenta avisos para datas que exigem revisão.
 - Guarda rascunhos e operações pendentes no navegador para ajudar a recuperar respostas incertas.
@@ -33,13 +34,15 @@ Para lançar apenas entrada e saída, mantenha **os dois campos de almoço vazio
 
 Os testes automatizados cobrem dias úteis, sábados, domingos e feriados com duas ou quatro marcações, consulta, envio, duplicidades, horários incompletos e a regra anterior de 04:00. Execute `npm ci` e `npm test` com Microsoft Edge instalado; em outros sistemas, instale o Chromium do Playwright ou informe `HE_BROWSER_PATH`.
 
+Se aparecer “Consulta não confirmada”, o envio continua bloqueado quando houver HE ilegível, valores ausentes nas duas categorias, totais divergentes ou uma consulta incompleta. Uma coluna vazia acompanhada de HE válida na outra categoria é tratada como zero. Depois de atualizar o userscript, clique em **Atualizar** e calcule os dias antes do envio.
+
 O código publicado omite o número funcional e o telefone pessoal presentes no material de distribuição local. Para relatar um problema, use [GitHub Issues](https://github.com/deadidlemmo/horas-extras-userscript/issues), sem incluir dados de servidores, senhas ou capturas não anonimizadas.
 
 ## Arquivos
 
 | Arquivo | Conteúdo |
 | --- | --- |
-| [`Horas_Extras_v4_6_BETA.user.js`](Horas_Extras_v4_6_BETA.user.js) | Userscript 4.6.0-beta.22 |
+| [`Horas_Extras_v4_6_BETA.user.js`](Horas_Extras_v4_6_BETA.user.js) | Userscript 4.6.0-beta.23 |
 | [`tests/horas-extras.test.js`](tests/horas-extras.test.js) | Testes automatizados do cadastro e da consulta |
 
 ## Autoria

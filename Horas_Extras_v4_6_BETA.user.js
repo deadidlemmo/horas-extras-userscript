@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Horas Extras - Lançamento e Consulta
 // @namespace    https://servicosead.praiagrande.sp.gov.br/
-// @version      4.6.0-beta.22
+// @version      4.6.0-beta.23
 // @description  HE variável conforme horários, consulta preventiva de datas e relatório exportável — beta para testes
 // @match        https://servicosead.praiagrande.sp.gov.br/folha/CadastroHoras.aspx*
 // @match        https://servicosead.praiagrande.sp.gov.br/folha/ConsultaRegistro.aspx*
@@ -262,6 +262,28 @@
 
     function duracaoRetornadaValida(v) {
         return typeof v === 'string' && /^\d{1,3}:\d{2}(?::\d{2})?$/.test(v) && Number(v.split(':')[1]) < 60 && (v.split(':').length === 2 || Number(v.split(':')[2]) < 60);
+    }
+    function duracaoVaziaConsultaHE(valor){
+        const texto=String(valor??'').trim();
+        return texto===''||texto==='-'||texto==='—';
+    }
+    function segundosDuracaoConsultaHE(valor,opcional=false,rotulo='HE'){
+        if(valor===null||valor===undefined)throw Error('Valor de '+rotulo+' ausente na consulta');
+        const texto=String(valor??'').trim();
+        if(duracaoVaziaConsultaHE(texto)){
+            if(opcional)return 0;
+            throw Error('Valor de '+rotulo+' ausente na consulta');
+        }
+        if(/^\d+(?:[.,]\d+)?$/.test(texto)){
+            const segundos=Math.round(Number(texto.replace(',','.'))*3600);
+            if(Number.isSafeInteger(segundos))return segundos;
+        }
+        if(!duracaoRetornadaValida(texto))throw Error('Formato de '+rotulo+' inesperado na consulta: '+texto.slice(0,40));
+        const [horas,minutos,segundos=0]=texto.split(':').map(Number);
+        return horas*3600+minutos*60+segundos;
+    }
+    function registroComHEConsultaHE(c){
+        return !duracaoVaziaConsultaHE(c[8])||!duracaoVaziaConsultaHE(c[9]);
     }
     function normalizarMarcaVaziaHE(valor){
         const texto=String(valor??'').trim();
@@ -3258,8 +3280,8 @@
 
     const revisoesPendenciasHE=new Map();
     function operacaoConfereRegistro(op,r){
-        if(!r)return false;const l=op.linha;
-        return r.data===op.data&&r.entrada===l.entrada&&r.saidaAl===l.saidaAl&&r.retorno===l.retorno&&r.saida===l.saida&&segundosHora(r.he50)===op.seg50&&segundosHora(r.he100)===op.seg100;
+        if(!r||r.he50==null||r.he100==null)return false;const l=op.linha;
+        return r.data===op.data&&r.entrada===l.entrada&&r.saidaAl===l.saidaAl&&r.retorno===l.retorno&&r.saida===l.saida&&segundosDuracaoConsultaHE(r.he50,true)===op.seg50&&segundosDuracaoConsultaHE(r.he100,true)===op.seg100;
     }
     function renderPendenciasHE(){
         const box=document.getElementById('helPendenciasHE');if(!box)return;
@@ -3488,13 +3510,13 @@
     }
 
     function compararRegistro(tr,registro) {
-        if(!registro)return {ok:false,horarios:false,horas:false,partes:false};
+        if(!registro||registro.he50==null||registro.he100==null)return {ok:false,horarios:false,horas:false,partes:false};
         const linha=dadosLinha(tr),compat=linhaParaSistema(linha);
         const tecnica=compat.linhaSistema;
         const horarios=!!tecnica && ['entrada','saidaAl','retorno','saida'].every(k=>tecnica[k]===registro[k]);
         const esperado=heEsperadaSegundos(linha);
         const horas=registro.heSegundos===(esperado??Number(tr.dataset.total||0));
-        const partes=tr.dataset.preview!=='1' || (segundosHora(registro.he50)===Number(tr.dataset.seg50 || 0) && segundosHora(registro.he100)===Number(tr.dataset.seg100 || 0));
+        const partes=tr.dataset.preview!=='1' || (segundosDuracaoConsultaHE(registro.he50,true)===Number(tr.dataset.seg50 || 0) && segundosDuracaoConsultaHE(registro.he100,true)===Number(tr.dataset.seg100 || 0));
         return {ok:horarios&&horas&&partes,horarios,horas,partes};
     }
     function abrirComparacao(tr) {
@@ -3548,7 +3570,7 @@
             tr.dataset.registroVerificado=JSON.stringify(registro||null);
             tr.dataset.conferenciaMensagem=result.ok?(MODO_SIMULACAO?'Simulado e conferido':'Incluído e conferido'):registro?'Registro encontrado com divergência — revisar':'Não localizado neste período — conferir';
             if(result.ok){const op=lerOperacaoHE(infoServidor().rf,data);if(op&&op.periodo.nome===periodoSelecionado().nome&&String(op.periodo.ano)===String(periodoSelecionado().ano)&&operacaoConfereRegistro(op,registro))concluirOperacaoHE(op,'confirmada-pela-consulta');}
-            if(result.ok&&!jaConferido)notificarOperacaoHE('cadastro',data,{nome:infoServidor()?.nome||registro.nome,grupo:chaveConsultaAtual(),segundos:segundosHora(registro.he50)+segundosHora(registro.he100)});
+            if(result.ok&&!jaConferido)notificarOperacaoHE('cadastro',data,{nome:infoServidor()?.nome||registro.nome,grupo:chaveConsultaAtual(),segundos:segundosDuracaoConsultaHE(registro.he50,true)+segundosDuracaoConsultaHE(registro.he100,true)});
             if(result.ok && eraIncerto) {
                 delete tr.dataset.incerto;tr.classList.remove('hel-uncertain');tr.dataset.incluido='1';
                 const item=auditoria.slice().reverse().find(a=>a.data===data&&a.incerto);
@@ -3784,12 +3806,7 @@
             throw new Error('O resultado da consulta pertence a outro servidor ou período.');
         }
         const grid = doc.querySelector('#GridView1');
-        const parseHora = texto => {
-            if (!duracaoRetornadaValida(texto)) {
-                throw new Error('Formato de HE inesperado na consulta');
-            }
-            return segundosHora(texto);
-        };
+        const parseHora = (texto,rotulo='HE') => segundosDuracaoConsultaHE(texto,true,rotulo);
         const mapa = new Map();
         if (grid) {
             // Paging could hide registered dates; reject incomplete evidence rather than skip silently.
@@ -3806,13 +3823,14 @@
                 const data = c[3].match(/\b\d{2}\/\d{2}\/\d{4}\b/)?.[0];
                 if (!data || !dataValida(data) || mapa.has(data)) throw new Error('Data inválida ou repetida na consulta');
                 if(!horariosConsultaValidosHE(c)||!duracaoRetornadaValida(c[10]))throw Error('Horários ou adicional noturno inválidos na consulta');
+                if(!registroComHEConsultaHE(c))throw Error('Registro de '+data+' sem valores de HE na consulta');
                 mapa.set(data, { rf: c[0], nome: c[1], data, entrada: c[4], saidaAl: c[5], retorno: c[6], saida: c[7],
-                    adNoturno:c[10], usuario:c[11], he50: c[8], he100: c[9], heSegundos: parseHora(c[8]) + parseHora(c[9]) });
+                    adNoturno:c[10], usuario:c[11], he50: c[8], he100: c[9], heSegundos: parseHora(c[8],'HE 50% de '+data) + parseHora(c[9],'HE 100% de '+data) });
             }
         }
         const total = texto => {
             const t = String(texto || '').trim();
-            if (/^\d+(?:[.,]\d+)?$/.test(t)) return Math.round(Number(t.replace(',', '.')) * 3600);
+            if(duracaoVaziaConsultaHE(t))return 0;
             return parseHora(t);
         };
         const l50 = doc.querySelector('#L50'), l100 = doc.querySelector('#L100');
@@ -3930,7 +3948,7 @@
                 heRetornada: tr.dataset.preview === '1' ? formatarSegundos(Number(tr.dataset.total || 0)) : null,
                 registroExistente: cadastrado || null, conferenciaConsulta: tr.dataset.conferenciaConsulta || '', registroVerificado: tr.dataset.registroVerificado ? JSON.parse(tr.dataset.registroVerificado) : null, status: tr.querySelector('.hel-status').textContent };
         });
-        const dados = { versao: '4.6.0-beta.22', simulacao: MODO_SIMULACAO, exportadoEm: new Date().toISOString(),
+        const dados = { versao: '4.6.0-beta.23', simulacao: MODO_SIMULACAO, exportadoEm: new Date().toISOString(),
             contextoAtual: metaAuditoriaAtual(), contextoAuditoria: auditoriaMeta, consultaConfirmada,
             contextoConsulta: consultaContexto, recuperacoesRascunhos: listarRecuperacoesHE(infoServidor()?.rf??null), exclusoesPendentes: infoServidor()?listarExclusoesPendentesHE(infoServidor().rf):[], exclusoesPainel: [...lerHistoricoExclusoes(),...exclusoesPainel], inclusoesPendentes: infoServidor()?listarOperacoesHE(infoServidor().rf):[], calendario: { ano: mesAnoHoras().ano, resumo: resumoConsultaCalendario(mesAnoHoras().ano), fonte: 'https://brasilapi.com.br/api/feriados/v1/' + mesAnoHoras().ano, respostaRecebidaEm: consultasCalendario.get(mesAnoHoras().ano)?.em || null, somenteAvisos: !bloquearFeriadosNacionais(), bloquearFeriadosNacionais: bloquearFeriadosNacionais(), referenciasLocaisConferidasEm: '2026-10-04', avisos: linhas.map(l => ({ data: l.data, aviso: avisoCalendario(l.data) })).filter(l => l.aviso) }, linhas, auditoria };
         dados.avisosHistorico=[...avisosHistoricoHE];if(avisosHistoricoHE.length)mensagem('warning','Relatório exportado com os dados válidos. '+avisosHistoricoHE.length+' registro(s) do histórico não puderam ser lidos e foram preservados.');
@@ -5041,7 +5059,7 @@
     renderAuditoria();
     atualizarAvisoRascunho();
 
-    console.log('[HE Lote] Versão 4.6 beta 22 carregada.' + (MODO_SIMULACAO ? ' MODO SIMULAÇÃO.' : ''));
+    console.log('[HE Lote] Versão 4.6 beta 23 carregada.' + (MODO_SIMULACAO ? ' MODO SIMULAÇÃO.' : ''));
     }
 
     // ---------------------------------------------------------------------
@@ -5106,15 +5124,8 @@
         };
 
         const duracaoParaMinutos = valor => {
-            const texto = String(valor || '').trim();
-            if (!texto) return 0;
-            const hm = texto.match(/^(\d+):(\d{2})$/);
-            if(duracaoRetornadaValida(texto)){const a=texto.split(':').map(Number);return a[0]*60+a[1]+(a[2]||0)/60;}
-            if (/^\d+[.,]\d+$/.test(texto)) {
-                const n = Number(texto.replace(',', '.'));
-                return Number.isFinite(n) ? Math.round(n * 60) : 0;
-            }
-            return 0;
+            try{return segundosDuracaoConsultaHE(String(valor??''),true)/60;}
+            catch{return 0;}
         };
 
         const minutosParaDuracao = minutos => {
@@ -5651,7 +5662,7 @@
             <div class="helq-header">
                 <div>
                     <h1>Consulta de Horas Extras</h1>
-                    <div class="helq-subtitle">Consulta, conferência e exclusão por lançamento · <strong>v4.6 beta 22</strong></div>
+                    <div class="helq-subtitle">Consulta, conferência e exclusão por lançamento · <strong>v4.6 beta 23</strong></div>
                 </div>
                 <a class="helq-back" href="${voltarHref}">← Voltar</a>
             </div>
@@ -5999,8 +6010,8 @@
         const selecionadosConsulta=new Set();let registrosConfirmacao=[],ultimoFocoConsulta=null;
         const normalizarRFConsulta=v=>String(v||'').trim().replace(/^0+(?=\d)/,'');
         const mesmoContextoConsulta=()=>normalizarRFConsulta(txtRegistro.value)===normalizarRFConsulta(contextoConsulta.rf)&&mes.value===contextoConsulta.mes&&String(ano.value)===contextoConsulta.ano;
-        const segundosConsulta=v=>{v=String(v||'').trim();if(!duracaoRetornadaValida(v))throw Error('Horas inválidas na consulta');const a=v.split(':').map(Number);return a[0]*3600+a[1]*60+(a[2]||0);};
-        const totalSegundosConsulta=v=>{v=String(v||'').trim();if(/^\d+(?:[.,]\d+)?$/.test(v))return Math.round(Number(v.replace(',','.'))*3600);return segundosConsulta(v);};
+        const segundosConsulta=(v,rotulo='HE')=>segundosDuracaoConsultaHE(v,true,rotulo);
+        const totalSegundosConsulta=v=>segundosConsulta(v);
         function validarDocumentoConsulta(doc,ctx) {
             if(normalizarRFConsulta(doc.querySelector('#TextBox1')?.value)!==normalizarRFConsulta(ctx.rf)||doc.querySelector('#DropDownList1')?.value!==ctx.mes||String(doc.querySelector('#anoPeriodo')?.value)!==ctx.ano)throw Error('A consulta pertence a outro servidor ou período');
             const grid=doc.querySelector('#GridView1'),mapa=new Map();let s50=0,s100=0;
@@ -6012,7 +6023,8 @@
                     const c=[...tr.cells].map(c=>c.textContent.trim()),data=normalizarData(c[3]),dt=dataParaDate(data);
                     if(c.length!==12||normalizarRFConsulta(c[0])!==normalizarRFConsulta(ctx.rf)||c[2]!==ctx.mes||!dt||mapa.has(data))throw Error('Registro inconsistente ou repetido');
                     if(!horariosConsultaValidosHE(c)||!duracaoRetornadaValida(c[10]))throw Error('Horários ou adicional noturno inválidos na consulta');
-                    const a=segundosConsulta(c[8]),b=segundosConsulta(c[9]);s50+=a;s100+=b;
+                    if(!registroComHEConsultaHE(c))throw Error('Registro de '+data+' sem valores de HE na consulta');
+                    const a=segundosConsulta(c[8],'HE 50% de '+data),b=segundosConsulta(c[9],'HE 100% de '+data);s50+=a;s100+=b;
                     mapa.set(data,{registro:c[0],nome:c[1],periodo:c[2],data,dataObj:dt,diaSemana:DIAS_SEMANA[dt.getDay()],fimDeSemana:[0,6].includes(dt.getDay()),entrada:c[4],saidaAl:c[5],retornoAl:c[6],saida:c[7],he50:c[8],he100:c[9],totalDia:minutosParaDuracao((a+b)/60),totalDiaMin:(a+b)/60,temHE100:b>0,adNoturno:c[10],usuario:c[11]});
                 }
             }
@@ -6142,8 +6154,8 @@
             }
             try {
                 const grid=document.getElementById('GridView1'),cabecalho=['Registro','nome','Periodo','data','entrada','SaidaAl','RetornoAl','saida','HE50','HE100','AdNoturno','usuario'];
-                const seg=v=>{v=String(v||'').trim();if(!duracaoRetornadaValida(v))throw Error('Horas inválidas');const a=v.split(':').map(Number);return a[0]*3600+a[1]*60+(a[2]||0);};
-                const total=v=>{v=String(v||'').trim();if(/^\d+(?:[.,]\d+)?$/.test(v))return Math.round(Number(v.replace(',','.'))*3600);return seg(v);};
+                const seg=v=>segundosDuracaoConsultaHE(v,true);
+                const total=v=>seg(v);
                 let s50=0,s100=0;const datas=new Set();
                 if(grid){
                     if([...grid.querySelectorAll('a')].some(a=>/Page\$/i.test(a.getAttribute('href')||'')))throw Error('Consulta paginada');
@@ -6151,6 +6163,7 @@
                     for(const tr of [...grid.rows].slice(1)){
                         const c=[...tr.cells].map(c=>c.textContent.trim());const d=normalizarData(c[3]);
                         if(c.length!==12||rf(c[0])!==rf(pendente.registro)||c[2]!==pendente.periodo||!dataParaDate(d)||datas.has(d))throw Error('Dados inconsistentes');
+                        if(!registroComHEConsultaHE(c))throw Error('Registro sem valores de HE');
                         datas.add(d);s50+=seg(c[8]);s100+=seg(c[9]);
                     }
                 }
@@ -6169,7 +6182,7 @@
         iniciarMelhoriasConsulta();
         conferirExclusaoAnterior();
 
-        console.log(`[HE Consulta] Versão 4.6 beta 22 carregada. ${registros.length} lançamento(s) renderizado(s).`);
+        console.log(`[HE Consulta] Versão 4.6 beta 23 carregada. ${registros.length} lançamento(s) renderizado(s).`);
     }
 
 })();

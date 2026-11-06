@@ -19,8 +19,8 @@ function cadastro(parametros = new URLSearchParams(), calculado = false, cenario
         <select id="anoPeriodo" name="anoPeriodo">${opcoes(['2026', '2027'], parametros.get('anoPeriodo') || '2026')}</select>
         <select id="DropDownList2" name="DropDownList2">${opcoes(['-', '04:00', '06:00', '08:00', '12:00'], carga)}</select>
         ${['txtData', 'txtEntrada', 'txtSaidaAl', 'txtRetornoAl', 'txtSaida'].map(id => campo(id, parametros.get(id) || '')).join('')}
-        ${campo('txtHE50', calculado ? cenario.he50 || '00:00:00' : '')}
-        ${campo('txtHE100', calculado ? cenario.he100 || '00:00:00' : '')}
+        ${campo('txtHE50', calculado ? cenario.he50 ?? '00:00:00' : '')}
+        ${campo('txtHE100', calculado ? cenario.he100 ?? '00:00:00' : '')}
         <input type="submit" id="Button1" name="Button1" value="Calcular Horas">
         <input type="submit" id="btIncluir" name="btIncluir" value="Incluir">
         </div></form></body></html>`;
@@ -28,11 +28,12 @@ function cadastro(parametros = new URLSearchParams(), calculado = false, cenario
 
 function consulta(parametros = new URLSearchParams(), registro = null, cenario = {}) {
     const intervalo = valor => cenario.marcadorVazio && !valor ? '&mdash;' : valor || '';
+    const he50=cenario.consultaHe50??cenario.he50??'00:00',he100=cenario.consultaHe100??cenario.he100??'00:00';
     const tabela = registro ? `<table id="GridView1"><tr><th>Registro</th><th>nome</th><th>Periodo</th><th>data</th><th>entrada</th><th>SaidaAl</th><th>RetornoAl</th><th>saida</th><th>HE50</th><th>HE100</th><th>AdNoturno</th><th>usuario</th></tr>
         <tr><td>123456</td><td>Servidor Teste</td><td>Novembro</td><td>${registro.get('txtData')}</td>
         <td>${registro.get('txtEntrada')}</td><td>${intervalo(registro.get('txtSaidaAl'))}</td>
         <td>${intervalo(registro.get('txtRetornoAl'))}</td><td>${registro.get('txtSaida')}</td>
-        <td>${cenario.he50 || '00:00'}</td><td>${cenario.he100 || '00:00'}</td><td>00:00</td><td>Teste</td></tr></table>` : '';
+        <td>${he50}</td><td>${he100}</td><td>00:00</td><td>Teste</td></tr></table>` : '';
     return `<!doctype html><html><body><form id="form1" action="ConsultaRegistro.aspx">
         <input name="__VIEWSTATE" value="estado"><input name="__EVENTVALIDATION" value="evento">
         ${campo('TextBox1', parametros.get('TextBox1') || '')}${campo('TextBox2')}
@@ -40,8 +41,8 @@ function consulta(parametros = new URLSearchParams(), registro = null, cenario =
         <select id="anoPeriodo" name="anoPeriodo">${opcoes(['2026', '2027'], parametros.get('anoPeriodo') || '2026')}</select>
         <input type="submit" id="Button1" name="Button1" value="Consultar">
         <input id="btnLimpar" name="btnLimpar" value="Limpar"><input id="btnExcluir" name="btnExcluir" value="Excluir">
-        ${tabela}<span id="L50">${registro ? cenario.he50 || '00:00' : '00:00'}</span>
-        <span id="L100">${registro ? cenario.he100 || '00:00' : '00:00'}</span>
+        ${tabela}<span id="L50">${registro ? cenario.total50??he50 : '00:00'}</span>
+        <span id="L100">${registro ? cenario.total100??he100 : '00:00'}</span>
         </form></body></html>`;
 }
 
@@ -50,7 +51,7 @@ async function abrirCenario(browser, cenario) {
     const pagina = await contexto.newPage();
     const erros = [], posts = [];
     let registro = cenario.preexistente ? new URLSearchParams({
-        txtData: cenario.data, txtEntrada: cenario.entrada, txtSaidaAl: cenario.saidaAl,
+        txtData: cenario.preexistenteData || cenario.data, txtEntrada: cenario.entrada, txtSaidaAl: cenario.saidaAl,
         txtRetornoAl: cenario.retorno, txtSaida: cenario.saida
     }) : null;
     pagina.on('pageerror', erro => erros.push(erro.message));
@@ -105,7 +106,9 @@ const cenarios = [
     { nome: 'feriado com quatro marcações', data: '12/10/2026', entrada: '07:00', saidaAl: '11:00', retorno: '12:00', saida: '16:00', he50: '08:00', tecnico: ['07:00', '11:00', '12:00', '16:00'] },
     { nome: 'feriado com duas marcações e carga 12:00', data: '12/10/2026', carga: '12:00', entrada: '08:00', saidaAl: '', retorno: '', saida: '17:00', he50: '09:00', tecnico: ['08:00', '', '', '17:00'] },
     { nome: 'carga 08:00 com intervalo mantém cálculo oficial', data: '01/10/2026', carga: '08:00', entrada: '07:06', saidaAl: '12:00', retorno: '13:00', saida: '18:57', he50: '02:51', tecnico: ['07:06', '12:00', '13:00', '18:57'] },
-    { nome: 'carga 12:00 atravessa meia-noite sem almoço', data: '30/10/2026', carga: '12:00', entrada: '18:30', saidaAl: '', retorno: '', saida: '06:30', he50: '12:00', tecnico: ['18:30', '', '', '06:30'] }
+    { nome: 'carga 12:00 atravessa meia-noite sem almoço', data: '30/10/2026', carga: '12:00', entrada: '18:30', saidaAl: '', retorno: '', saida: '06:30', he50: '12:00', tecnico: ['18:30', '', '', '06:30'] },
+    { nome: 'HE 100% vazia na consulta confirma inclusão', data: '05/10/2026', carga: '08:00', entrada: '08:00', saidaAl: '', retorno: '', saida: '13:00', he50: '05:00:00', he100: '', tecnico: ['08:00', '', '', '13:00'] },
+    { nome: 'HE decimal na consulta confirma inclusão', data: '05/10/2026', carga: '08:00', entrada: '08:00', saidaAl: '', retorno: '', saida: '13:30', he50: '05:30:00', consultaHe50: '5,5', consultaHe100: '—', total50: '5.5', total100: '', tecnico: ['08:00', '', '', '13:30'] }
 ];
 
 test('cadastro e consulta: padrões de diferentes secretarias', async t => {
@@ -219,6 +222,38 @@ test('cadastro e consulta: padrões de diferentes secretarias', async t => {
                 assert.deepEqual(erros, []);
             } finally { await contexto.close(); }
         });
+
+        await t.test('HE 50% vazia na consulta equivale a zero quando HE 100% é válida', async () => {
+            const { contexto, pagina, posts, erros } = await abrirCenario(navegador, {
+                data: '05/10/2026', preexistenteData: '01/10/2026', carga: '08:00',
+                entrada: '08:00', saidaAl: '', retorno: '', saida: '17:00',
+                he50: '', he100: '05:00:00', total50: '', total100: '05:00:00', preexistente: true
+            });
+            try {
+                await pagina.click('#helCalcular');
+                await pagina.waitForFunction(() => document.querySelector('#helLinhas tr')?.dataset.preview === '1');
+                assert.equal(await pagina.locator('#helLinhas tr .hel-total').textContent(), '05:00');
+                assert.equal(posts.length, 1, 'consulta permitiu o cálculo do dia novo');
+                assert.deepEqual(erros, []);
+            } finally { await contexto.close(); }
+        });
+
+        for(const cenario of [
+            { nome: 'duas colunas de HE vazias', he50: '', he100: '', total50: '', total100: '' },
+            { nome: 'HE com formato ilegível', he50: 'cinco horas', he100: '', total50: '05:00', total100: '' },
+            { nome: 'total divergente da tabela', he50: '05:00:00', he100: '', total50: '04:00', total100: '' }
+        ]) await t.test(cenario.nome + ' mantém o envio bloqueado', async () => {
+            const { contexto, pagina, posts, erros } = await abrirCenario(navegador, {
+                ...cenario, data: '05/10/2026', preexistenteData: '01/10/2026', carga: '08:00',
+                entrada: '08:00', saidaAl: '', retorno: '', saida: '17:00', preexistente: true
+            });
+            try {
+                await pagina.click('#helCalcular');
+                assert.equal(posts.length, 0, 'consulta ambígua não autoriza cálculo ou envio');
+                assert.notEqual(await pagina.locator('#helLinhas tr').getAttribute('data-preview'), '1');
+                assert.deepEqual(erros, []);
+            } finally { await contexto.close(); }
+        });
     } finally { await navegador.close(); }
 });
 
@@ -229,6 +264,12 @@ test('tela de consulta distingue duas marcações válidas de registros inválid
         const parametros = new URLSearchParams({ TextBox1: '123456', DropDownList1: 'Novembro', anoPeriodo: '2026' });
         for (const caso of [
             { nome: 'sábado sem almoço', data: '03/10/2026', entrada: '07:00', saidaAl: '', retorno: '', saida: '19:00', valido: true },
+            { nome: 'HE 100% vazia', data: '03/10/2026', entrada: '07:00', saidaAl: '', retorno: '', saida: '19:00', he100: '', total100: '', valido: true },
+            { nome: 'HE 50% vazia', data: '03/10/2026', entrada: '07:00', saidaAl: '', retorno: '', saida: '19:00', he50: '', he100: '12:00:00', total50: '', valido: true },
+            { nome: 'HE decimal', data: '03/10/2026', entrada: '07:00', saidaAl: '', retorno: '', saida: '19:00', he50: '12,0', total50: '12.0', valido: true },
+            { nome: 'HE inteira', data: '03/10/2026', entrada: '07:00', saidaAl: '', retorno: '', saida: '19:00', he50: '12', total50: '12', valido: true },
+            { nome: 'ambas HE vazias', data: '03/10/2026', entrada: '07:00', saidaAl: '', retorno: '', saida: '19:00', he50: '', he100: '', valido: false },
+            { nome: 'HE ilegível', data: '03/10/2026', entrada: '07:00', saidaAl: '', retorno: '', saida: '19:00', he50: '12h', total50: '12', valido: false },
             { nome: 'horário de almoço parcial', data: '03/10/2026', entrada: '07:00', saidaAl: '12:00', retorno: '', saida: '19:00', valido: false },
             { nome: 'linha duplicada', data: '03/10/2026', entrada: '07:00', saidaAl: '', retorno: '', saida: '19:00', valido: false, duplicado: true }
         ]) await t.test(caso.nome, async () => {
@@ -237,7 +278,8 @@ test('tela de consulta distingue duas marcações válidas de registros inválid
             pagina.on('pageerror', erro => erros.push(erro.message));
             const registro = new URLSearchParams({ txtData: caso.data, txtEntrada: caso.entrada,
                 txtSaidaAl: caso.saidaAl, txtRetornoAl: caso.retorno, txtSaida: caso.saida });
-            let html = consulta(parametros, registro, { he50: '12:00', marcadorVazio: true });
+            let html = consulta(parametros, registro, { he50: caso.he50??'12:00', he100: caso.he100??'00:00',
+                total50: caso.total50, total100: caso.total100, marcadorVazio: true });
             if (caso.duplicado) {
                 const linha = html.match(/<tr><td>123456<\/td>.*?<\/tr>/s)[0];
                 html = html.replace('</table>', linha + '</table>');
@@ -249,7 +291,7 @@ test('tela de consulta distingue duas marcações válidas de registros inválid
                 assert.equal(await pagina.locator('#helq-app').count(), 1);
                 if (caso.valido) {
                     assert.equal(await pagina.locator('#helqContagem').textContent(), '1', (await pagina.locator('#helqStatus').textContent()) + ' ' + JSON.stringify(await pagina.locator('#GridView1 tr').last().locator('td').allTextContents()));
-                    assert.equal(await pagina.locator('#helqTotal50').textContent(), '12:00');
+                    assert.equal(await pagina.locator('#helqTotal50').textContent(), caso.he50===''?'00:00':'12:00');
                     assert.equal(await pagina.locator('#helqCopiarResumo').isDisabled(), false);
                 } else {
                     assert.equal(await pagina.locator('#helqContagem').textContent(), '—');
